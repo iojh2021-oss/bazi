@@ -2,6 +2,7 @@
 (function () {
   'use strict';
   const BZ = window.BZ;
+  BZ.extra = BZ.extra || { programs: [], stations: [], channels: [] };
 
   // ---------- برنامه‌ها (محتوای پخش؛ صدا و تصویر هر دو از روی seed ساخته می‌شوند) ----------
   const P = (id, name, kind, audio, video) => ({ id, name, kind, audio, video });
@@ -110,9 +111,9 @@
     tick(dt) { W.time += dt * W.speed; },
     rebuild() {
       W.programs = {};
-      BUILTIN_PROGRAMS.concat(W.custom.programs).forEach((p) => { W.programs[p.id] = p; });
-      W.stations = BUILTIN_STATIONS.concat(W.custom.stations);
-      W.channels = BUILTIN_CHANNELS.concat(W.custom.channels);
+      BUILTIN_PROGRAMS.concat(BZ.extra.programs, W.custom.programs).forEach((p) => { W.programs[p.id] = p; });
+      W.stations = BUILTIN_STATIONS.concat(BZ.extra.stations, W.custom.stations);
+      W.channels = BUILTIN_CHANNELS.concat(BZ.extra.channels, W.custom.channels);
     },
     save() { BZ.store.set('world', { env: W.env, custom: W.custom, speed: W.speed }); },
     load() {

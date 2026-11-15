@@ -20,6 +20,7 @@
   BZ.music = {
     bar(p, idx) {
       const a = p.audio, st = a.style;
+      if (st === 'production') return [];
       const R = BZ.rng(BZ.hash(a.seed + ':' + idx));
       const PR = BZ.rng(BZ.hash(a.seed + ':p:' + (idx >> 3)));
       const prog = CHORDS[Math.floor(PR() * CHORDS.length)];
@@ -150,7 +151,9 @@
         g.gain.setValueAtTime(e.g * 0.3, when + dur * 0.7); g.gain.linearRampToValueAtTime(0.0001, end);
         g.connect(dest);
         const o = ctx.createOscillator(); o.type = 'sawtooth';
-        o.frequency.setValueAtTime(f, when); o.frequency.linearRampToValueAtTime(f * 0.88, end);
+        o.frequency.setValueAtTime(f, when); o.frequency.linearRampToValueAtTime(f * (e.fe || 0.88), end);
+        if (e.cons === 'f') noiseHit(ctx, dest, when, 0.1, 'highpass', 4800, 0.7, 0.16);
+        else if (e.cons === 'p') noiseHit(ctx, dest, when, 0.035, 'bandpass', 1500, 1, 0.2);
         [[e.f1, 6, 1], [e.f2, 8, 0.6]].forEach(([fr, q, gain]) => {
           const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = fr; bp.Q.value = q;
           const gg = ctx.createGain(); gg.gain.value = gain; o.connect(bp); bp.connect(gg); gg.connect(g);
@@ -183,7 +186,7 @@
   BZ.ProgramPlayer = class {
     constructor(ctx, prog, dest, opts) {
       opts = opts || {};
-      this.ctx = ctx; this.p = prog; this.rate = opts.rate || 1; this.t0 = opts.t0 || 0;
+      this.ctx = ctx; this.p = prog; this.rate = opts.rate || 1; this.t0 = opts.t0 || 0; this.stream = opts.stream || null;
       this.out = ctx.createGain(); this.out.gain.value = 1; this.out.connect(dest);
       this.spb0 = 60 / prog.audio.bpm; this.barDur = 4 * this.spb0;
       this.ctxStart = ctx.currentTime + 0.06; this.nextBar = Math.floor(this.t0 / this.barDur + 1e-9); this.dead = false;
@@ -195,8 +198,14 @@
       if (this.dead) return;
       const ctx = this.ctx, horizon = this.contentNow() + 1.3 * this.rate;
       while (this.nextBar * this.barDur < horizon) {
-        const idx = this.nextBar++, bs = idx * this.barDur;
-        const evs = BZ.music.bar(this.p, idx);
+        const idx = this.nextBar, bs = idx * this.barDur;
+        let evs;
+        if (this.stream) {
+          evs = this.stream.bar(idx);
+          // بستهٔ صوتی هنوز نرسیده: صبر می‌کنیم؛ اگر زمانش گذشته باشد، افتِ بسته (قطع کوتاه صدا)
+          if (!evs) { if (bs + this.barDur > this.contentNow() - 0.2) break; this.nextBar++; continue; }
+        } else evs = BZ.music.bar(this.p, idx);
+        this.nextBar++;
         for (const e of evs) {
           const when = this.ctxStart + (bs + e.b * this.spb0 - this.t0) / this.rate;
           if (when < ctx.currentTime - 0.02) continue;

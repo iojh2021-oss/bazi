@@ -156,9 +156,9 @@
   BZ.video = {
     scenes: SC,
     // برنامه‌ای مجازی را در لحظهٔ محتوای t روی بوم می‌کشد
-    draw(g, w, h, prog, t) {
+    draw(g, w, h, prog, t, stream) {
       const fn = SC[prog.video.scene] || SC.testcard;
-      g.save(); g.globalAlpha = 1; fn(g, w, h, t, prog); g.restore();
+      g.save(); g.globalAlpha = 1; fn(g, w, h, t, prog, stream); g.restore();
     },
     // جلوه‌های پیکسلی: اشباع، روشنایی، تضاد، فام، برف و نوار VHS
     fx(img, o) {

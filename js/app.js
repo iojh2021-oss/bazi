@@ -4,6 +4,7 @@
   const BZ = window.BZ;
   const h = BZ.h;
 
+  function boot() {
   BZ.world.load();
   BZ.radio = new BZ.Radio('main');
   BZ.tv = new BZ.TV();
@@ -40,6 +41,7 @@
         h('li', null, 'رادیو: دایال را بکشید یا «جستجو» بزنید؛ شب، ایستگاه‌های دور AM بهتر شنیده می‌شوند.'),
         h('li', null, 'ویدئو: نوار خام بگذارید، کانال را انتخاب و ضبط کنید؛ سپس تلویزیون را روی AV بگذارید و پخش کنید.'),
         h('li', null, 'هایفای: منبع را TV یا VCR بگذارید تا صدای آن‌ها از آمپلی‌فایر پخش شود.'),
+        h('li', null, 'استودیو: عروسک و گیاه بسازید، نمایش یا «زندگی» کارگردانی کنید و روی کانال ۱۴ به بعد یا رادیو پخش کنید؛ سرور پخش داخل همین برنامه اجرا می‌شود.'),
         h('li', null, 'آزمایشگاه: محیط اتر را تغییر دهید، برنامه بسازید و اکوسیستم را آزمون کنید.')));
     const root = h('div', { class: 'home' },
       cabinet('wood', 'اتاق آزمایش', 'چهار دستگاه یک اکوسیستم', h('div', { class: 'tiles' }, mk('radio', '📻', 'رادیو', 'radio'), mk('tv', '📺', 'تلویزیون', 'tv'), mk('vcr', '📼', 'ویدئو', 'vcr'), mk('hifi', '🎛', 'هایفای', 'hifi'))),
@@ -62,6 +64,7 @@
   views.vcr = { build: () => cabinet('vcrcab', 'ویدئوی نواری', 'ضبط • پخش • زمان‌بندی • ردیابی', BZ.vcrPanel(BZ.vcr)) };
   views.hifi = { build: () => cabinet('hifi', 'هایفای استریو', 'تیونر • CD • گرامافون • آمپلی‌فایر', BZ.hifiPanel(BZ.hifi)) };
   views.lab = { build: () => BZ.labPanel() };
+  views.studio = { build: () => cabinet('wood', 'استودیو', 'عروسک و گیاه • کارگردانی • زندگی • سرور داخلی', BZ.directorPanel()) };
 
   function show(id) {
     cur = id; BZ.store.set('view', id);
@@ -73,7 +76,7 @@
   }
   BZ.show = show;
 
-  [['home', '🏠', 'اتاق'], ['radio', '📻', 'رادیو'], ['tv', '📺', 'تلویزیون'], ['vcr', '📼', 'ویدئو'], ['hifi', '🎛', 'هایفای'], ['lab', '🧪', 'آزمایشگاه']].forEach(([id, ic, name]) => {
+  [['home', '🏠', 'اتاق'], ['radio', '📻', 'رادیو'], ['tv', '📺', 'تلویزیون'], ['vcr', '📼', 'ویدئو'], ['hifi', '🎛', 'هایفای'], ['studio', '🎬', 'استودیو'], ['lab', '🧪', 'آزمایشگاه']].forEach(([id, ic, name]) => {
     const b = h('button', { type: 'button', class: 'navb', onclick: () => show(id) }, h('span', null, ic), name); b._id = id; nav.append(b);
   });
 
@@ -113,4 +116,6 @@
   show(views[BZ.store.get('view', 'home')] ? BZ.store.get('view', 'home') : 'home');
 
   if ('serviceWorker' in navigator && /^https?:/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+  BZ.net.start().then(() => BZ.lib.sync()).catch((e) => console.error(e)).then(boot);
 })();

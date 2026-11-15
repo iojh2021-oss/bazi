@@ -96,14 +96,14 @@
       ['هایفای: آلبوم‌ها و آهنگ‌ها معتبرند', () => [BZ.ALBUMS.length === 3 && BZ.ALBUMS.every((a) => a.tracks.length === 5 && a.tracks.every((t) => t.dur > 100)), '۱۵ آهنگ']],
       ['تصویر: همهٔ صحنه‌ها بدون خطا رسم می‌شوند', () => { const c = BZ.cv(192, 144), g = c.getContext('2d'); let n = 0; for (const k in BZ.video.scenes) { BZ.video.draw(g, 192, 144, Object.assign({}, W.programs.news1, { video: Object.assign({}, W.programs.news1.video, { scene: k }) }), 12.5); n++; } return [n >= 9, n + ' صحنه']; }],
       ['صدا: Web Audio در این دستگاه موجود است', () => [BZ.audio.available(), BZ.audio.ctx ? 'وضعیت: ' + BZ.audio.ctx.state : 'هنوز فعال نشده']],
-    ];
+    ].concat(BZ.extraTests || []);
     function run() {
       res.innerHTML = ''; let ok = 0;
-      tests.forEach(([name, fn]) => { let r; try { r = fn(); } catch (e) { r = [false, 'خطا: ' + e.message]; } if (r[0]) ok++; res.append(h('div', { class: 'erow ' + (r[0] ? 'pass' : 'fail') }, h('span', null, (r[0] ? '✓ ' : '✗ ') + name), h('b', null, r[1] || ''))); });
+      tests.forEach(([name, fn]) => { let r; try { r = fn(); } catch (e) { r = [false, 'خطا: ' + e.message]; } if (r[0]) ok++; else (run.fails = run.fails || []).push(name); res.append(h('div', { class: 'erow ' + (r[0] ? 'pass' : 'fail') }, h('span', null, (r[0] ? '✓ ' : '✗ ') + name), h('b', null, r[1] || ''))); });
       sum.textContent = ok + ' از ' + tests.length + ' آزمون موفق'; return { ok, total: tests.length };
     }
     const el = card('آزمون خودکار اکوسیستم', 'منطق اصلی (انتشار، انتخاب‌پذیری، تولید موسیقی، نوار، زمان‌بندی ویدئو، رندر تصویر) را یک‌جا بررسی می‌کند.', h('div', { class: 'r-ctrl' }, BZ.btn('▶ اجرای همهٔ آزمون‌ها', run), BZ.btn('ثبت نتیجه در دفتر', () => { const r = run(); BZ.notebook.add('آزمون خودکار', r); })), sum, res);
-    return { el, paint() {}, run };
+    return { el, paint() {}, run, tests };
   }
 
   // ================= دفتر آزمایش =================

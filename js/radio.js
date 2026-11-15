@@ -101,7 +101,7 @@
       list.forEach((r) => {
         if (!this.players.has(r.src.id)) {
           const gn = ctx.createGain(); gn.gain.value = 0; gn.connect(this.g.src);
-          this.players.set(r.src.id, { pl: new BZ.ProgramPlayer(ctx, W.program(r.src.program), gn, { t0: W.time }), g: gn });
+          const srcSt = r.src; this.players.set(r.src.id, { pl: BZ.makePlayer(ctx, W.program(r.src.program), gn, { t0: W.time, quality: () => BZ.rf.strength(srcSt, W.env, W.isNight()), tag: 'radio' }), g: gn });
         }
         const p = this.players.get(r.src.id);
         let gain;

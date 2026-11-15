@@ -67,7 +67,7 @@
         if (!this.pl || this.pl.key !== tu.src.id) {
           this.dropPlayer();
           const gn = ctx.createGain(); gn.gain.value = 1; gn.connect(this.g.tun);
-          this.pl = { key: tu.src.id, g: gn, player: new BZ.ProgramPlayer(ctx, BZ.world.program(tu.src.program), gn, { t0: BZ.world.time }) };
+          this.pl = { key: tu.src.id, g: gn, player: BZ.makePlayer(ctx, BZ.world.program(tu.src.program), gn, { t0: BZ.world.time, quality: () => this.tuner().sig, tag: 'tv' }) };
         }
       } else this.dropPlayer();
       this.g.tun.gain.setTargetAtTime(!av ? Math.min(1, tu.sig * 2) : 0, T, 0.06);
@@ -93,12 +93,13 @@
         const v = BZ.vcr ? BZ.vcr.getVideo() : null;
         if (!v) return { blue: true, sig: 1 };
         if (v.blank) return { snow: true, sig: 0 };
-        if (v.live) { const c = W.channelByNumber(v.ch); const s = c ? BZ.rf.strength(c, W.env, W.isNight()) : 0; return c && s > 0.08 ? { prog: W.program(c.program), t: W.time, sig: s } : { snow: true, sig: 0 }; }
-        return { prog: W.program(v.prog), t: v.t, vhs: v.vhs, sig: v.q };
+        const vst = BZ.vcr && BZ.vcr.pl ? BZ.vcr.pl.player.stream : null;
+        if (v.live) { const c = W.channelByNumber(v.ch); const s = c ? BZ.rf.strength(c, W.env, W.isNight()) : 0; return c && s > 0.08 ? { prog: W.program(c.program), t: W.time, sig: s, stream: vst } : { snow: true, sig: 0 }; }
+        return { prog: W.program(v.prog), t: v.t, vhs: v.vhs, sig: v.q, stream: vst };
       }
       const tu = this.tuner();
       if (!tu.src || tu.sig <= 0.08) return { snow: true, sig: 0 };
-      return { prog: W.program(tu.src.program), t: W.time, sig: tu.sig };
+      return { prog: W.program(tu.src.program), t: W.time, sig: tu.sig, stream: this.pl ? this.pl.player.stream : null };
     }
     render(dctx, W, H, now) {
       const env = BZ.world.env;
@@ -113,7 +114,7 @@
       const b = this.bg, w = this.buf.width, hh = this.buf.height;
       const src = this.source(); this.sig = src.sig;
       const warm = BZ.clamp((now - this.onAt) / 1400, 0, 1);
-      if (src.prog) BZ.video.draw(b, w, hh, src.prog, src.t);
+      if (src.prog) BZ.video.draw(b, w, hh, src.prog, src.t, src.stream);
       else if (src.blue) BZ.video.scenes.blue(b, w, hh, 0);
       else { b.fillStyle = '#000'; b.fillRect(0, 0, w, hh); }
       const mp = env.multipath * (src.prog ? 1 : 0);

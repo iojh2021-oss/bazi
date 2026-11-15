@@ -157,7 +157,8 @@
       else if (!this.pl || this.pl.key !== want.key || Math.abs(this.pl.player.contentNow() - want.t) > 0.8) {
         this.dropPlayer();
         const gn = ctx.createGain(); gn.connect(this.g.in);
-        this.pl = { key: want.key, g: gn, player: new BZ.ProgramPlayer(ctx, W.program(want.prog), gn, { t0: want.t }) };
+        const vq = () => (this.tape && this.mode !== 'stop' && this.mode !== 'rec' && !(this.getVideo() || {}).live) ? 1 : this.quality();
+        this.pl = { key: want.key, g: gn, player: BZ.makePlayer(ctx, W.program(want.prog), gn, { t0: want.t, quality: vq, tag: 'vcr' }) };
       }
       this.g.nz.gain.setTargetAtTime(want ? Math.pow(1 - Math.min(1, q), 2) * 0.25 + (v && v.vhs ? v.vhs.track * 0.15 : 0) : 0, T, 0.08);
       this.g.lp.frequency.setTargetAtTime(lp, T, 0.1);
@@ -183,6 +184,7 @@
     // زمان‌بند
     const tIn = h('input', { type: 'time', class: 'inp', value: '20:00' }), dIn = h('input', { type: 'number', class: 'inp', min: 1, max: 240, value: 10, style: { width: '70px' } });
     const timerSel = BZ.select(BZ.world.channels.map((c) => ({ v: String(c.number), t: c.number + ' — ' + c.name })), String(BZ.world.channels[0].number), () => {});
+    BZ.bus.on('world', () => { [chSel, timerSel].forEach((sel) => { const v = sel.value; sel.innerHTML = ''; BZ.world.channels.forEach((c) => sel.append(h('option', { value: String(c.number) }, c.number + ' — ' + c.name))); sel.value = v; }); });
     const tlist = h('div', { class: 'tlist' });
     function paintTimers() {
       tlist.innerHTML = '';
