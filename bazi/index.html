@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e1115">
+<meta name="description" content="آزمایشگاه رادیو، تلویزیون، ویدئو و هایفای — شبیه‌سازی کامل درون برنامه">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Bazi Lab — آزمایشگاه رادیو و تصویر</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header>
+  <div class="brand"><b>Bazi Lab</b><small>آزمایشگاه رادیو، تلویزیون، ویدئو و هایفای</small></div>
+  <div class="hdr-r"><span id="clock" title="ساعت جهان مجازی">--:--</span>
+    <input id="mvol" type="range" min="0" max="1" step="0.01" value="0.8" aria-label="بلندی کل">
+    <button id="mmute" class="btn sm" type="button" aria-label="بی‌صدا">🔊</button></div>
+</header>
+<main id="main"></main>
+<nav id="nav"></nav>
+<div id="gate">
+  <div class="gate-box">
+    <div class="gate-ic">📻 📺 📼 🎛</div>
+    <h1>Bazi Lab</h1>
+    <p>آزمایشگاهی بسته برای شناخت رادیو، تلویزیون، ویدئو و هایفای.<br>همهٔ فرستنده‌ها و برنامه‌ها درون همین برنامه شبیه‌سازی می‌شوند و هیچ ارتباط بیرونی ندارند.</p>
+    <button id="enter" class="btn go big" type="button">ورود به آزمایشگاه</button>
+  </div>
+</div>
+<script src="js/util.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/world.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/video.js"></script>
+<script src="js/radio.js"></script>
+<script src="js/tv.js"></script>
+<script src="js/vcr.js"></script>
+<script src="js/hifi.js"></script>
+<script src="js/lab.js"></script>
+<script src="js/studio.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
