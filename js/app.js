@@ -64,7 +64,7 @@
   views.vcr = { build: () => cabinet('vcrcab', 'ویدئوی نواری', 'ضبط • پخش • زمان‌بندی • ردیابی', BZ.vcrPanel(BZ.vcr)) };
   views.hifi = { build: () => cabinet('hifi', 'هایفای استریو', 'تیونر • CD • گرامافون • آمپلی‌فایر', BZ.hifiPanel(BZ.hifi)) };
   views.lab = { build: () => BZ.labPanel() };
-  views.studio = { build: () => cabinet('wood', 'استودیو', 'عروسک و گیاه • کارگردانی • زندگی • سرور داخلی', BZ.directorPanel()) };
+  views.studio = { build: () => { const p = BZ.directorPanel(), c = cabinet('wood', 'استودیو', 'عروسک و گیاه • کارگردانی • زندگی • سرور داخلی', p); c.paint = p.paint; return c; } };
 
   function show(id) {
     cur = id; BZ.store.set('view', id);

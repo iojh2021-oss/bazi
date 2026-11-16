@@ -20,7 +20,7 @@
   const BUILTIN_SHOWS = [
     { id: 'show_life', name: 'زندگی در خانهٔ سبز', kind: 'life', seed: 'green-house', epoch: 69600, title: 'زندگی در خانهٔ سبز', music: { style: 'ambient', vol: 0.18, root: 45, scale: 'dorian' }, life: { hour: 7, agents: ['c_pashmi', 'c_jojo', 'c_robot'], plants: ['c_cactus', 'c_laleh', 'c_fern'] }, builtin: true },
     {
-      id: 'show_talk', name: 'گفت‌وگوی علمی گیاه و عروسک', kind: 'script', seed: 'talk', set: 'living', camera: 'auto', title: 'گفت‌وگوی علمی', music: { style: '', vol: 0.2 },
+      id: 'show_talk', name: 'گفت‌وگوی علمی گیاه و عروسک', kind: 'script', seed: 'talk', set: 'world', props: [{ type: 'mountain', color: '#8a96aa', x: 0.22, z: 1, size: 1.6 }, { type: 'house', color: '#e8c9a0', x: 0.8, z: 0.85, size: 1 }, { type: 'pine', color: '#2f7d4a', x: 0.04, z: 0.62, size: 1 }, { type: 'tree', color: '#4da35a', x: 0.95, z: 0.5, size: 1 }, { type: 'pond', color: '#4a90d8', x: 0.45, z: 0.6, size: 1 }, { type: 'flowerbed', color: '#ff5d8f', x: 0.62, z: 0.12, size: 1 }, { type: 'lamp', color: '#ffd36a', x: 0.13, z: 0.28, size: 1 }, { type: 'fence', color: '#c9a46a', x: 0.5, z: 0.78, size: 1 }], camera: 'auto', title: 'گفت‌وگوی علمی', music: { style: '', vol: 0.2 },
       cast: [{ cid: 'c_pashmi', x: 0.1 }, { cid: 'c_laleh', x: 0.5 }, { cid: 'c_robot', x: 0.9 }],
       lines: [
         { who: 0, emo: 'happy', act: 'wave', text: 'سلام به همهٔ بینندگان آزمایشگاه باز!' },

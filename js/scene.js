@@ -41,7 +41,71 @@
       g.fillStyle = '#25324a'; g.fillRect(0, fy, w, h - fy); g.fillStyle = '#3b4d70'; g.fillRect(w * 0.05, fy - h * 0.02, w * 0.9, h * 0.05);
     },
   };
-  BZ.SET_NAMES = { living: 'اتاق نشیمن', garden: 'باغ', stage: 'صحنهٔ نمایش', studio: 'استودیوی خبر' };
+  BZ.SET_NAMES = { world: 'جهان سه‌بعدی', living: 'اتاق نشیمن', garden: 'باغ', stage: 'صحنهٔ نمایش', studio: 'استودیوی خبر' };
+
+
+  // ---------- جهان سه‌بعدی (پرسپکتیو واقعی: x/d و y/d) ----------
+  // دوربین در ارتفاع ثابت و افق در h*0.40؛ عمق z از ۰ (نزدیک) تا ۱ (دور): d = 1 + z*5
+  const PROPS = {
+    tree: 'درخت', pine: 'کاج', bush: 'بوته', flowerbed: 'باغچهٔ گل', rock: 'سنگ', house: 'خانه', fence: 'نرده', lamp: 'چراغ', table: 'میز', sofa: 'مبل', tv: 'تلویزیون', pillar: 'ستون', cloud: 'ابر', mountain: 'کوه', pond: 'برکه', box: 'جعبه',
+  };
+  BZ.PROP_NAMES = PROPS;
+  const Cm = () => BZ.color;
+  function drawProp(g, p, X, Y, S, t) {
+    const c = p.color || '#4da35a', dk = Cm().shade(c, -0.35), lt = Cm().shade(c, 0.3), u = 40 * S;
+    g.save(); g.translate(X, Y);
+    // سایهٔ زمین
+    g.fillStyle = 'rgba(0,0,0,.22)'; g.beginPath(); g.ellipse(0, 0, u * (p.type === 'house' ? 1.9 : 0.9), u * 0.18, 0, 0, 7); g.fill();
+    const sw = Math.sin(t * 1.3 + (p.x || 0) * 9) * u * 0.03;
+    switch (p.type) {
+      case 'tree': g.fillStyle = '#6a4424'; g.fillRect(-u * 0.12, -u * 1.5, u * 0.24, u * 1.5); [[0, -2.1, 0.85], [-0.5, -1.7, 0.6], [0.5, -1.7, 0.6]].forEach((q) => { g.fillStyle = c; g.beginPath(); g.arc(q[0] * u + sw, q[1] * u, q[2] * u, 0, 7); g.fill(); g.fillStyle = lt; g.beginPath(); g.arc(q[0] * u + sw - q[2] * u * 0.25, q[1] * u - q[2] * u * 0.25, q[2] * u * 0.35, 0, 7); g.fill(); }); break;
+      case 'pine': g.fillStyle = '#5a3a1a'; g.fillRect(-u * 0.1, -u * 0.5, u * 0.2, u * 0.5); for (let i = 0; i < 3; i++) { g.fillStyle = i % 2 ? dk : c; g.beginPath(); g.moveTo(-u * (0.85 - i * 0.2) + sw * i, -u * (0.4 + i * 0.7)); g.lineTo(u * (0.85 - i * 0.2) + sw * i, -u * (0.4 + i * 0.7)); g.lineTo(sw * (i + 1), -u * (1.5 + i * 0.7)); g.closePath(); g.fill(); } break;
+      case 'bush': g.fillStyle = c; [-0.5, 0, 0.5].forEach((x, i) => { g.beginPath(); g.arc(x * u, -u * (0.35 + (i === 1 ? 0.15 : 0)), u * 0.5, 0, 7); g.fill(); }); g.fillStyle = lt; g.beginPath(); g.arc(-u * 0.1, -u * 0.6, u * 0.18, 0, 7); g.fill(); break;
+      case 'flowerbed': g.fillStyle = '#6a4424'; g.fillRect(-u * 0.9, -u * 0.12, u * 1.8, u * 0.12); for (let i = 0; i < 6; i++) { const x = (i - 2.5) * u * 0.3; g.strokeStyle = '#3f9a52'; g.lineWidth = Math.max(1, u * 0.04); g.beginPath(); g.moveTo(x, -u * 0.1); g.lineTo(x + sw * (i % 2 ? 1 : -1), -u * 0.5); g.stroke(); g.fillStyle = i % 2 ? c : lt; g.beginPath(); g.arc(x + sw * (i % 2 ? 1 : -1), -u * 0.55, u * 0.13, 0, 7); g.fill(); } break;
+      case 'rock': g.fillStyle = c; g.beginPath(); g.moveTo(-u * 0.8, 0); g.quadraticCurveTo(-u * 0.9, -u * 0.7, -u * 0.2, -u * 0.8); g.quadraticCurveTo(u * 0.6, -u * 0.9, u * 0.8, 0); g.closePath(); g.fill(); g.fillStyle = lt; g.beginPath(); g.ellipse(-u * 0.25, -u * 0.55, u * 0.25, u * 0.12, -0.4, 0, 7); g.fill(); break;
+      case 'house': g.fillStyle = c; g.fillRect(-u * 1.4, -u * 1.5, u * 2.8, u * 1.5); g.fillStyle = dk; g.fillRect(-u * 1.4, -u * 0.1, u * 2.8, u * 0.1); g.fillStyle = '#a33a3a'; g.beginPath(); g.moveTo(-u * 1.7, -u * 1.5); g.lineTo(0, -u * 2.7); g.lineTo(u * 1.7, -u * 1.5); g.closePath(); g.fill(); g.fillStyle = '#5a3a1a'; g.fillRect(-u * 0.25, -u * 0.95, u * 0.5, u * 0.95); g.fillStyle = '#bfe6ff'; g.fillRect(-u * 1.1, -u * 1.2, u * 0.5, u * 0.5); g.fillRect(u * 0.6, -u * 1.2, u * 0.5, u * 0.5); g.strokeStyle = dk; g.lineWidth = Math.max(1, u * 0.04); g.strokeRect(-u * 1.1, -u * 1.2, u * 0.5, u * 0.5); g.strokeRect(u * 0.6, -u * 1.2, u * 0.5, u * 0.5); break;
+      case 'fence': g.fillStyle = c; for (let i = -3; i <= 3; i++) g.fillRect(i * u * 0.3 - u * 0.06, -u * 0.75, u * 0.12, u * 0.75); g.fillRect(-u * 1, -u * 0.55, u * 2, u * 0.08); g.fillRect(-u * 1, -u * 0.3, u * 2, u * 0.08); break;
+      case 'lamp': g.fillStyle = '#333'; g.fillRect(-u * 0.04, -u * 2, u * 0.08, u * 2); { const night = 0.6 + 0.4 * Math.sin(t * 2); const gr = g.createRadialGradient(0, -u * 2, 2, 0, -u * 2, u * 1.4); gr.addColorStop(0, 'rgba(255,230,150,' + (0.7 * night) + ')'); gr.addColorStop(1, 'rgba(255,230,150,0)'); g.fillStyle = gr; g.fillRect(-u * 1.4, -u * 3.4, u * 2.8, u * 2.8); } g.fillStyle = c; g.beginPath(); g.arc(0, -u * 2, u * 0.2, 0, 7); g.fill(); break;
+      case 'table': g.fillStyle = dk; g.fillRect(-u * 0.7, -u * 0.55, u * 0.1, u * 0.55); g.fillRect(u * 0.6, -u * 0.55, u * 0.1, u * 0.55); g.fillStyle = c; g.fillRect(-u * 0.85, -u * 0.65, u * 1.7, u * 0.12); break;
+      case 'sofa': g.fillStyle = dk; g.fillRect(-u * 1.1, -u * 0.95, u * 2.2, u * 0.7); g.fillStyle = c; g.fillRect(-u * 1.1, -u * 0.55, u * 2.2, u * 0.45); g.fillRect(-u * 1.25, -u * 0.7, u * 0.25, u * 0.7); g.fillRect(u * 1, -u * 0.7, u * 0.25, u * 0.7); g.fillStyle = lt; g.fillRect(-u * 0.95, -u * 0.5, u * 0.9, u * 0.14); g.fillRect(u * 0.05, -u * 0.5, u * 0.9, u * 0.14); break;
+      case 'tv': g.fillStyle = '#222'; g.fillRect(-u * 0.6, -u * 0.9, u * 1.2, u * 0.85); { const gr = g.createLinearGradient(0, -u * 0.85, 0, -u * 0.15); gr.addColorStop(0, c); gr.addColorStop(1, dk); g.fillStyle = gr; g.fillRect(-u * 0.52, -u * 0.82, u * 1.04, u * 0.64); } g.fillStyle = 'rgba(255,255,255,' + (0.1 + 0.08 * Math.sin(t * 7)) + ')'; g.fillRect(-u * 0.52, -u * 0.82, u * 1.04, u * 0.64); g.fillStyle = '#222'; g.fillRect(-u * 0.2, -u * 0.05, u * 0.4, u * 0.05); break;
+      case 'pillar': g.fillStyle = c; g.fillRect(-u * 0.25, -u * 2.2, u * 0.5, u * 2.2); g.fillStyle = lt; g.fillRect(-u * 0.38, -u * 2.3, u * 0.76, u * 0.12); g.fillRect(-u * 0.38, -u * 0.12, u * 0.76, u * 0.12); g.fillStyle = dk; g.fillRect(u * 0.1, -u * 2.2, u * 0.15, u * 2.2); break;
+      case 'cloud': g.fillStyle = 'rgba(255,255,255,.92)'; [[-0.8, 0, 0.5], [-0.2, -0.3, 0.65], [0.5, -0.1, 0.55], [1, 0.05, 0.4]].forEach((q) => { g.beginPath(); g.arc(q[0] * u + ((t * 5) % 40) * 0.0, -u * 3 + q[1] * u, q[2] * u, 0, 7); g.fill(); }); break;
+      case 'mountain': g.fillStyle = c; g.beginPath(); g.moveTo(-u * 3, 0); g.lineTo(0, -u * 3.2); g.lineTo(u * 3, 0); g.closePath(); g.fill(); g.fillStyle = dk; g.beginPath(); g.moveTo(0, -u * 3.2); g.lineTo(u * 3, 0); g.lineTo(u * 0.6, 0); g.closePath(); g.fill(); g.fillStyle = '#fff'; g.beginPath(); g.moveTo(-u * 0.6, -u * 2.35); g.lineTo(0, -u * 3.2); g.lineTo(u * 0.6, -u * 2.35); g.lineTo(u * 0.2, -u * 2.1); g.lineTo(-u * 0.1, -u * 2.4); g.closePath(); g.fill(); break;
+      case 'pond': { const gr = g.createRadialGradient(0, 0, 2, 0, 0, u * 1.6); gr.addColorStop(0, lt); gr.addColorStop(1, c); g.fillStyle = gr; g.beginPath(); g.ellipse(0, 0, u * 1.6, u * 0.45, 0, 0, 7); g.fill(); g.strokeStyle = 'rgba(255,255,255,.5)'; g.lineWidth = 1; const r = (t * 0.6) % 1; g.beginPath(); g.ellipse(0, 0, u * 1.4 * r, u * 0.4 * r, 0, 0, 7); g.stroke(); } break;
+      default: g.fillStyle = c; g.fillRect(-u * 0.5, -u * 0.8, u, u * 0.8); g.fillStyle = lt; g.fillRect(-u * 0.5, -u * 0.8, u, u * 0.15); g.fillStyle = dk; g.fillRect(u * 0.35, -u * 0.8, u * 0.15, u * 0.8);
+    }
+    g.restore();
+  }
+  // نگاشت جهان ← صفحه. cam.x (۰..۱) دوربین را در عرض می‌چرخاند و پارالاکس عمق می‌سازد.
+  function proj(w, h, x, z, pan) {
+    const d = 1 + z * 3, hor = h * 0.4, k = 1 / d;
+    return { X: w / 2 + (x - 0.5 - pan) * w * 1.9 * k, Y: hor + (h * 0.97 - hor) * k, S: k * (h / 300) * 1.05, d };
+  }
+  SETS.world = function (g, w, h, t, sc) {
+    const hor = h * 0.4, pan = Math.sin(t * 0.12) * 0.06;
+    grad(g, 0, hor, '#5fb4f5', '#dff3ff', w);
+    g.fillStyle = '#fff6b0'; g.beginPath(); g.arc(w * 0.78 - pan * 80, h * 0.14, h * 0.06, 0, 7); g.fill();
+    const mt = (off, col, hh, sp) => { g.fillStyle = col; g.beginPath(); g.moveTo(0, hor); for (let x = 0; x <= w; x += w / 24) g.lineTo(x, hor - hh * (0.55 + 0.45 * Math.sin(x * sp + off + pan * 6))); g.lineTo(w, hor); g.closePath(); g.fill(); };
+    mt(1, '#9fb9d6', h * 0.18, 0.011); mt(4, '#78a98a', h * 0.1, 0.018);
+    const gr = g.createLinearGradient(0, hor, 0, h); gr.addColorStop(0, '#6cc27a'); gr.addColorStop(1, '#2e7d46'); g.fillStyle = gr; g.fillRect(0, hor, w, h - hor);
+    // شبکهٔ زمین با پرسپکتیو
+    g.strokeStyle = 'rgba(255,255,255,.12)'; g.lineWidth = 1;
+    for (let i = 0; i <= 6; i++) { const p = proj(w, h, 0, i / 6, pan); g.beginPath(); g.moveTo(0, p.Y); g.lineTo(w, p.Y); g.stroke(); }
+    for (let i = -4; i <= 4; i++) { const a = proj(w, h, 0.5 + i * 0.25, 0, pan), b = proj(w, h, 0.5 + i * 0.25, 1, pan); g.beginPath(); g.moveTo(a.X, a.Y); g.lineTo(b.X, b.Y); g.stroke(); }
+  };
+  // بازیگران و اشیا با ترتیب عمق (دور اول)
+  function drawWorldItems(g, w, h, sc) {
+    const t = sc.t, pan = Math.sin(t * 0.12) * 0.06;
+    const items = [];
+    (sc.props || []).forEach((p) => items.push({ z: p.z == null ? 0.5 : p.z, p }));
+    sc.actors.forEach((a) => items.push({ z: a.z == null ? 0.1 : a.z, a }));
+    items.sort((A, B) => B.z - A.z);
+    items.forEach((it) => {
+      if (it.p) { const q = it.p, pr = proj(w, h, q.x == null ? 0.5 : q.x, it.z, pan); drawProp(g, q, pr.X, pr.Y, pr.S * (q.size || 1) * 1.1, t); }
+      else { const a = it.a, pr = proj(w, h, a.x, it.z, pan); BZ.char.draw(g, BZ.lib.char(a.cid), { x: pr.X, y: pr.Y, s: pr.S, dir: a.dir, emo: a.emo, open: a.open, vis: a.vis, t, act: a.act, gest: a.gest, look: a.look }); }
+    });
+  }
 
   // ---------- متن‌های روی تصویر ----------
   function fit(g, text, maxW, px, bold) { let s = px; g.font = (bold ? 'bold ' : '') + s + 'px ' + BZ.FONT; while (g.measureText(text).width > maxW && s > 8) { s -= 1; g.font = (bold ? 'bold ' : '') + s + 'px ' + BZ.FONT; } return s; }
@@ -72,8 +136,9 @@
     const fy = h * 0.84, s = h / 300, cam = sc.cam || { z: 1, x: 0.5, y: 0.5 };
     const z = Math.max(1, cam.z), cx = clamp(cam.x, 0.5 / z, 1 - 0.5 / z), cy = clamp(cam.y, 0.5 / z, 1 - 0.5 / z);
     g.save(); g.translate(w / 2, h / 2); g.scale(z, z); g.translate(-cx * w, -cy * h);
-    (SETS[sc.set] || SETS.living)(g, w, h, sc.t);
-    sc.actors.forEach((a) => BZ.char.draw(g, BZ.lib.char(a.cid), { x: a.x * w, y: fy, s, dir: a.dir, emo: a.emo, open: a.open, vis: a.vis, t: sc.t, act: a.act, gest: a.gest, look: a.look }));
+    (SETS[sc.set] || SETS.living)(g, w, h, sc.t, sc);
+    if (sc.set === 'world') drawWorldItems(g, w, h, sc);
+    else sc.actors.forEach((a) => BZ.char.draw(g, BZ.lib.char(a.cid), { x: a.x * w, y: fy, s, dir: a.dir, emo: a.emo, open: a.open, vis: a.vis, t: sc.t, act: a.act, gest: a.gest, look: a.look }));
     g.restore();
     title(g, w, h, sc.title); subtitle(g, w, h, sc.sub);
   }

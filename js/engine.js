@@ -206,7 +206,7 @@
       const mo = L ? BZ.speech.mouthAt(L.syl, tt - L.start) : { open: 0, v: 'e' };
       const actors = (s.cast || []).map((m, i) => {
         const x = px(m, i), isS = L && L.who === i;
-        return { cid: m.cid, x, dir: isS ? (x < 0.5 ? 1 : -1) : (spkX >= x ? 1 : -1), emo: isS ? L.emo : (L && L.emo === 'happy' ? 'happy' : 'neutral'), open: isS ? mo.open : 0, vis: isS ? mo.v : 'e', act: isS ? L.act : '', gest: isS && mo.open > 0.05 ? 0.6 : 0, look: L ? clamp((spkX - x) * 2, -1, 1) : 0 };
+        return { cid: m.cid, x, z: m.z == null ? 0.1 : m.z, dir: isS ? (x < 0.5 ? 1 : -1) : (spkX >= x ? 1 : -1), emo: isS ? L.emo : (L && L.emo === 'happy' ? 'happy' : 'neutral'), open: isS ? mo.open : 0, vis: isS ? mo.v : 'e', act: isS ? L.act : '', gest: isS && mo.open > 0.05 ? 0.6 : 0, look: L ? clamp((spkX - x) * 2, -1, 1) : 0 };
       });
       let cam = { z: 1, x: 0.5, y: 0.5 };
       if (s.camera === 'auto' && L) {
@@ -214,7 +214,7 @@
         const sz = (this.char(L.cid).size || 1);
         cam = { z: 1 + 0.9 * k, x: lerp(0.5, spkX, k), y: lerp(0.5, 0.84 - 0.3 * sz, k) };
       }
-      return { k: 's', t: tt, set: s.set || 'living', cam, actors, sub: L ? { who: this.char(L.cid).name, text: L.text } : null, title: tt < 4 ? (s.title || '') : '', hud: null };
+      return { k: 's', t: tt, set: s.set || 'living', props: s.props || [], cam, actors, sub: L ? { who: this.char(L.cid).name, text: L.text } : null, title: tt < 4 ? (s.title || '') : '', hud: null };
     }
     sceneLife(s, t) {
       const L = this.life(s), simT = Math.max(0, t - (s.epoch || 0)), step = Math.floor(simT * SPS), frac = simT * SPS - step;

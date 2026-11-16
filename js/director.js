@@ -102,10 +102,11 @@
     let cur = BZ.lib.chars.find(notTmp), emo = 'neutral', sayText = 'سلام! من یک شخصیت آزمایشگاهی هستم.';
     const cv = BZ.cv(420, 330, 'scope'), g = cv.getContext('2d'), pl = Player(cv);
     const list = h('div', { class: 'chips' }), ed = h('div');
-    const save = () => { if (cur && !cur.builtin) BZ.lib.putChar(cur); };
+    const draftOf = (c) => { if (!c.builtin) return c; const d = JSON.parse(JSON.stringify(c)); d._src = c.id; d.id = 'u_' + BZ.uid('c'); d.builtin = false; d._draft = true; d.name = c.name + ' (من)'; return d; };
+    const save = () => { if (!cur) return; if (cur._draft) { delete cur._draft; BZ.lib.chars.push(cur); renderList(); renderEd(); } BZ.lib.putChar(cur); };
     function renderList() {
       list.innerHTML = '';
-      BZ.lib.chars.filter(notTmp).forEach((c) => list.append(h('button', { type: 'button', class: 'chip' + (c === cur ? ' on' : ''), onclick: () => { cur = c; pl.stop(); renderList(); renderEd(); } }, (c.type === 'plant' ? '🌱 ' : '🧸 ') + c.name)));
+      BZ.lib.chars.filter(notTmp).forEach((c) => list.append(h('button', { type: 'button', class: 'chip' + (cur && (c === cur || c.id === cur.id || cur._src === c.id) ? ' on' : ''), onclick: () => { cur = draftOf(c); pl.stop(); renderList(); renderEd(); } }, (c.type === 'plant' ? '🌱 ' : '🧸 ') + c.name)));
     }
     function create(type, from) {
       const base = from ? JSON.parse(JSON.stringify(from)) : { type, name: type === 'plant' ? 'گیاه جدید' : 'عروسک جدید', body: 'sock', species: 'flower', color: type === 'plant' ? '#ff5d8f' : '#e8903a', accent: type === 'plant' ? '#c9673a' : '#8a4b1a', eyes: 0.5, eyeGap: 0.5, ears: 'cat', size: 1, voice: { pitch: type === 'plant' ? 140 : 200, speed: 1 } };
@@ -115,13 +116,13 @@
     }
     function renderEd() {
       ed.innerHTML = ''; if (!cur) return;
-      const c = cur, ro = !!c.builtin;
+      const c = cur, ro = false;
       const inp = (key, type) => { const i = h('input', { type: type || 'text', class: 'inp', value: c[key] == null ? '' : c[key], disabled: ro }); i.addEventListener('input', () => { c[key] = i.value; save(); renderList(); }); return i; };
       const sl = (label, key, min, max, step, fmt, path) => BZ.slider({ label, min, max, step, value: path ? c.voice[key] : (c[key] == null ? 0.5 : c[key]), fmt, onInput: (v) => { if (ro) return; if (path) c.voice[key] = v; else c[key] = v; save(); } });
       const clr = (key) => { const i = h('input', { type: 'color', class: 'inp clr', value: c[key] || '#888888', disabled: ro }); i.addEventListener('input', () => { c[key] = i.value; save(); }); return i; };
       const sel = (opts, key) => { const s = BZ.select(opts, c[key] || opts[0].v, (v) => { c[key] = v; save(); }); s.disabled = ro; return s; };
       ed.append(
-        ro ? h('p', { class: 'note strong' }, 'این شخصیت داخلی است؛ برای ویرایش «کپی» بسازید.') : null,
+        c._draft ? h('p', { class: 'note strong' }, 'این شخصیت داخلی است؛ با اولین تغییر، نسخهٔ شخصی شما ساخته و ذخیره می‌شود.') : null,
         h('div', { class: 'fgrid' }, fld('نام', inp('name')), c.type === 'plant' ? fld('گونه', sel(SPEC_OPTS, 'species')) : fld('بدنه', sel(BODY_OPTS, 'body')), c.type === 'puppet' ? fld('گوش/آنتن', sel(EARS_OPTS, 'ears')) : null, fld('رنگ اصلی', clr('color')), fld(c.type === 'plant' ? 'رنگ گلدان' : 'رنگ فرعی', clr('accent'))),
         h('div', { class: 'sl-grid' }, sl('اندازهٔ چشم', 'eyes', 0, 1, 0.05, (v) => v.toFixed(2)), sl('فاصلهٔ چشم‌ها', 'eyeGap', 0, 1, 0.05, (v) => v.toFixed(2)), sl('اندازه', 'size', 0.6, 1.5, 0.05, (v) => v.toFixed(2)), sl('زیر و بمی صدا', 'pitch', 70, 400, 5, (v) => v + ' Hz', true), sl('سرعت گفتار', 'speed', 0.6, 1.6, 0.05, (v) => v.toFixed(2) + '×', true)),
         h('p', { class: 'note' }, c.type === 'plant' ? 'گیاه: ساقه با ترکیب سه نوسان باد تکان می‌خورد؛ در «زندگی» رشد می‌کند و بدون آب پژمرده می‌شود.' : 'عروسک: بازوی دو‌مفصلی (FK)، تنفس، پلک‌زدن، ابرو و دهان؛ شکل دهان از ویزم واکه‌ها می‌آید.'),
@@ -132,13 +133,14 @@
     const say = BZ.btn('🗣 بگو', () => {
       if (!cur) return;
       const tmp = { id: 'tmp_char', name: 'پیش‌نمایش', kind: 'script', seed: 'tmp', set: 'stage', camera: 'auto', title: '', music: { style: '', vol: 0 }, cast: [{ cid: cur.id, x: 0.5 }], lines: [{ who: 0, emo, act: '', text: sayText }] };
-      BZ.net.call('PUT', '/shows/tmp_char', tmp).then((r) => { if (!ok(r)) return; BZ.net.invalidate('prod_tmp_char'); pl.start(tmp, 0, scriptLen(tmp) + 0.5); });
+      (cur._draft ? BZ.net.call('PUT', '/chars/' + cur.id, Object.assign({}, cur, { _draft: undefined, builtin: false })) : Promise.resolve()).then(() => BZ.net.call('PUT', '/shows/tmp_char', tmp)).then((r) => { if (!ok(r)) return; BZ.net.invalidate('prod_tmp_char'); pl.start(tmp, 0, scriptLen(tmp) + 0.5); });
     }, 'go');
     const root = card('کارگاه عروسک و گیاه', 'شخصیت بسازید و صدایش را آزمایش کنید. هر تغییر روی سرور داخلی ذخیره می‌شود و در نمایش‌ها و «زندگی» استفاده می‌شود.',
       list, h('div', { class: 'r-ctrl' }, BZ.btn('+ عروسک', () => create('puppet')), BZ.btn('+ گیاه', () => create('plant'))), cv,
       h('div', { class: 'r-ctrl' }, emoSeg), h('div', { class: 'r-ctrl' }, sayI, say, BZ.btn('■', () => pl.stop(), 'sm')), ed);
+    if (cur) cur = draftOf(cur);
     renderList(); renderEd();
-    BZ.bus.on('lib', () => { cur = (cur && BZ.lib.chars.find((x) => x.id === cur.id)) || BZ.lib.chars.find(notTmp); renderEd(); renderList(); });
+    BZ.bus.on('lib', () => { if (!(cur && cur._draft)) { cur = (cur && BZ.lib.chars.find((x) => x.id === cur.id)) || BZ.lib.chars.find(notTmp); renderEd(); } renderList(); });
     return {
       el: root, paint(now) {
         if (pl.playing) { pl.paint(now); return; }
@@ -154,20 +156,21 @@
     let cur = BZ.lib.shows.find((s) => s.kind === 'script' && notTmp(s));
     const cv = BZ.cv(480, 360, 'scope'), pl = Player(cv);
     const picker = h('div', { class: 'chips' }), ed = h('div'), pub = publishBox(() => cur), prog = h('div', { class: 'note' });
-    const save = () => { if (cur && !cur.builtin) { BZ.lib.putShow(cur); } };
+    const save = () => { if (!cur) return; if (cur._draft) { delete cur._draft; BZ.lib.shows.push(cur); renderPicker(); pub.refresh(); } BZ.lib.putShow(cur); };
+    const draftOf = (x) => { if (!x.builtin) return x; const d = JSON.parse(JSON.stringify(x)); d._src = x.id; d.id = 's_' + BZ.uid('x'); d.builtin = false; d._draft = true; d.name = x.name + ' (من)'; return d; };
     function renderPicker() {
       picker.innerHTML = '';
-      BZ.lib.shows.filter((s) => s.kind === 'script' && notTmp(s)).forEach((s) => picker.append(h('button', { type: 'button', class: 'chip' + (s === cur ? ' on' : ''), onclick: () => { cur = s; pl.stop(); renderPicker(); renderEd(); pub.refresh(); } }, '🎬 ' + s.name)));
+      BZ.lib.shows.filter((s) => s.kind === 'script' && notTmp(s)).forEach((s) => picker.append(h('button', { type: 'button', class: 'chip' + (cur && (s === cur || cur._src === s.id) ? ' on' : ''), onclick: () => { cur = draftOf(s); pl.stop(); renderPicker(); renderEd(); pub.refresh(); } }, '🎬 ' + s.name)));
     }
     function create(from) {
-      const s = from ? JSON.parse(JSON.stringify(from)) : { name: 'نمایش جدید', kind: 'script', seed: BZ.uid('s'), set: 'living', camera: 'auto', title: '', music: { style: '', vol: 0.2 }, cast: [{ cid: 'c_pashmi', x: 0.3 }, { cid: 'c_laleh', x: 0.7 }], lines: [{ who: 0, emo: 'happy', act: 'wave', text: 'سلام! به نمایش من خوش آمدید.' }, { who: 1, emo: 'happy', act: '', text: 'سلام! امروز می‌خواهیم دربارهٔ نور و آب حرف بزنیم.' }] };
+      const s = from ? JSON.parse(JSON.stringify(from)) : { name: 'نمایش جدید', kind: 'script', seed: BZ.uid('s'), set: 'world', props: [{ type: 'mountain', color: '#8a96aa', x: 0.25, z: 1, size: 1.6 }, { type: 'house', color: '#e8c9a0', x: 0.78, z: 0.8, size: 1 }, { type: 'tree', color: '#4da35a', x: 0.92, z: 0.45, size: 1 }, { type: 'flowerbed', color: '#ff5d8f', x: 0.6, z: 0.3, size: 1 }], camera: 'auto', title: '', music: { style: '', vol: 0.2 }, cast: [{ cid: 'c_pashmi', x: 0.3 }, { cid: 'c_laleh', x: 0.7 }], lines: [{ who: 0, emo: 'happy', act: 'wave', text: 'سلام! به نمایش من خوش آمدید.' }, { who: 1, emo: 'happy', act: '', text: 'سلام! امروز می‌خواهیم دربارهٔ نور و آب حرف بزنیم.' }] };
       s.id = 's_' + BZ.uid('x'); s.builtin = false; if (from) s.name = from.name + ' (کپی)';
       BZ.lib.shows.push(s); cur = s;
       BZ.net.call('PUT', '/shows/' + s.id, s).then((r) => { ok(r); renderPicker(); renderEd(); pub.refresh(); });
     }
     function renderEd() {
       ed.innerHTML = ''; if (!cur) return;
-      const s = cur, ro = !!s.builtin, chOpts = BZ.lib.chars.filter(notTmp).map((c) => ({ v: c.id, t: (c.type === 'plant' ? '🌱 ' : '🧸 ') + c.name }));
+      const s = cur, ro = false, chOpts = BZ.lib.chars.filter(notTmp).map((c) => ({ v: c.id, t: (c.type === 'plant' ? '🌱 ' : '🧸 ') + c.name }));
       const inp = (key) => { const i = h('input', { type: 'text', class: 'inp', value: s[key] || '', disabled: ro }); i.addEventListener('input', () => { s[key] = i.value; save(); }); return i; };
       const castBox = h('div', { class: 'tlist' }), lineBox = h('div', { class: 'tlist' });
       function drawCast() {
@@ -175,8 +178,28 @@
         s.cast.forEach((m, i) => {
           const sel = BZ.select(chOpts, m.cid, (v) => { m.cid = v; save(); drawLines(); }); sel.disabled = ro;
           const x = BZ.slider({ label: 'جایگاه', min: 0, max: 1, step: 0.05, value: m.x == null ? 0.5 : m.x, fmt: (v) => Math.round(v * 100) + '٪', onInput: (v) => { m.x = v; save(); } });
-          castBox.append(h('div', { class: 'trow' }, h('b', null, (i + 1) + '.'), sel, x, ro ? null : BZ.btn('حذف', () => { s.cast.splice(i, 1); s.lines = s.lines.filter((l) => l.who !== i).map((l) => (l.who > i ? Object.assign(l, { who: l.who - 1 }) : l)); save(); drawCast(); drawLines(); }, 'sm')));
+          const zz = BZ.slider({ label: 'عمق (۰ نزدیک ← ۱ دور)', min: 0, max: 1, step: 0.05, value: m.z == null ? 0.1 : m.z, fmt: (v) => v.toFixed(2), onInput: (v) => { m.z = v; save(); } });
+          castBox.append(h('div', { class: 'trow wrap' }, h('b', null, (i + 1) + '.'), sel, x, s.set === 'world' ? zz : null, ro ? null : BZ.btn('حذف', () => { s.cast.splice(i, 1); s.lines = s.lines.filter((l) => l.who !== i).map((l) => (l.who > i ? Object.assign(l, { who: l.who - 1 }) : l)); save(); drawCast(); drawLines(); }, 'sm')));
         });
+      }
+      const propBox = h('div', { class: 'tlist' }), propWrap = h('div');
+      function drawProps() {
+        propWrap.innerHTML = ''; propBox.innerHTML = '';
+        if (s.set !== 'world') { propWrap.append(h('p', { class: 'note' }, 'برای ساختن اشیا و منظرهٔ سه‌بعدی، دکور را «جهان سه‌بعدی» بگذارید.')); return; }
+        s.props = s.props || [];
+        const types = Object.keys(BZ.PROP_NAMES).map((k) => ({ v: k, t: BZ.PROP_NAMES[k] })), defC = { tree: '#4da35a', pine: '#2f7d4a', bush: '#3f9a52', flowerbed: '#ff5d8f', rock: '#8a8f98', house: '#e8c9a0', fence: '#c9a46a', lamp: '#ffd36a', table: '#9a6a3a', sofa: '#b04a5a', tv: '#4a90d8', pillar: '#d8d2c4', cloud: '#ffffff', mountain: '#8a96aa', pond: '#4a90d8', box: '#e8903a' };
+        s.props.forEach((p, i) => {
+          const ts = BZ.select(types, p.type, (v) => { p.type = v; save(); }), cl = h('input', { type: 'color', class: 'inp clr', value: p.color || '#4da35a', style: { width: '44px' } });
+          cl.addEventListener('input', () => { p.color = cl.value; save(); });
+          propBox.append(h('div', { class: 'trow wrap' }, ts, cl,
+            BZ.slider({ label: 'چپ/راست', min: -0.2, max: 1.2, step: 0.02, value: p.x == null ? 0.5 : p.x, fmt: (v) => v.toFixed(2), onInput: (v) => { p.x = v; save(); } }),
+            BZ.slider({ label: 'عمق', min: 0, max: 1, step: 0.02, value: p.z == null ? 0.5 : p.z, fmt: (v) => v.toFixed(2), onInput: (v) => { p.z = v; save(); } }),
+            BZ.slider({ label: 'اندازه', min: 0.4, max: 3, step: 0.1, value: p.size || 1, fmt: (v) => v.toFixed(1) + '×', onInput: (v) => { p.size = v; save(); } }),
+            BZ.btn('✕', () => { s.props.splice(i, 1); save(); drawProps(); }, 'sm')));
+        });
+        const addT = BZ.select(types, 'tree', () => {});
+        propWrap.append(h('h4', null, 'اشیای صحنه (سه‌بعدی)'), propBox, h('div', { class: 'r-ctrl' }, addT, BZ.btn('+ ساخت شیء', () => { if (s.props.length >= 24) { BZ.toast('حداکثر ۲۴ شیء'); return; } const t = addT.value; s.props.push({ type: t, color: defC[t], x: 0.15 + Math.random() * 0.7, z: 0.3 + Math.random() * 0.6, size: 1 }); save(); drawProps(); }, 'go'),
+          BZ.btn('منظرهٔ نمونه', () => { s.props = [{ type: 'mountain', color: '#8a96aa', x: 0.25, z: 1, size: 1.6 }, { type: 'house', color: '#e8c9a0', x: 0.78, z: 0.8, size: 1 }, { type: 'pine', color: '#2f7d4a', x: 0.05, z: 0.6 }, { type: 'tree', color: '#4da35a', x: 0.92, z: 0.45 }, { type: 'pond', color: '#4a90d8', x: 0.4, z: 0.55 }, { type: 'flowerbed', color: '#ff5d8f', x: 0.62, z: 0.3 }, { type: 'lamp', color: '#ffd36a', x: 0.15, z: 0.25 }, { type: 'fence', color: '#c9a46a', x: 0.5, z: 0.75 }]; save(); drawProps(); })));
       }
       function drawLines() {
         lineBox.innerHTML = '';
@@ -190,27 +213,28 @@
           lineBox.append(h('div', { class: 'trow wrap' }, ws, es, as, ti, ro ? null : h('span', null, BZ.btn('▲', () => mv(-1), 'sm'), BZ.btn('▼', () => mv(1), 'sm'), BZ.btn('✕', () => { s.lines.splice(i, 1); save(); drawLines(); }, 'sm'))));
         });
       }
-      const setSel = BZ.select(Object.keys(BZ.SET_NAMES).map((k) => ({ v: k, t: BZ.SET_NAMES[k] })), s.set || 'living', (v) => { s.set = v; save(); }); setSel.disabled = ro;
+      const setSel = BZ.select(Object.keys(BZ.SET_NAMES).map((k) => ({ v: k, t: BZ.SET_NAMES[k] })), s.set || 'living', (v) => { s.set = v; save(); drawCast(); drawProps(); }); setSel.disabled = ro;
       const cam = BZ.seg([{ v: 'auto', t: 'نمای نزدیک خودکار' }, { v: 'wide', t: 'نمای باز' }], s.camera || 'auto', (v) => { if (!ro) { s.camera = v; save(); } });
       const mus = BZ.select(MUSIC_OPTS, (s.music && s.music.style) || '', (v) => { s.music = s.music || {}; s.music.style = v; save(); }); mus.disabled = ro;
       const mv = BZ.slider({ label: 'بلندی موسیقی پس‌زمینه', min: 0, max: 0.6, step: 0.02, value: (s.music && s.music.vol) || 0.2, fmt: (v) => Math.round(v * 100) + '٪', onInput: (v) => { s.music = s.music || {}; s.music.vol = v; save(); } });
       const addCast = BZ.select(chOpts, chOpts[0] ? chOpts[0].v : '', () => {});
       ed.append(
-        ro ? h('p', { class: 'note strong' }, 'این نمایش داخلی است؛ برای ویرایش «کپی» بسازید.') : null,
+        s._draft ? h('p', { class: 'note strong' }, 'این نمایش داخلی است؛ با اولین تغییر، نسخهٔ شخصی شما ساخته می‌شود.') : null,
         h('div', { class: 'fgrid' }, fld('نام نمایش', inp('name')), fld('عنوان روی تصویر', inp('title')), fld('دکور', setSel), fld('موسیقی', mus)),
         h('div', { class: 'r-ctrl' }, cam), mv,
         h('h4', null, 'بازیگران'), castBox, ro ? null : h('div', { class: 'r-ctrl' }, addCast, BZ.btn('+ افزودن بازیگر', () => { if (s.cast.length >= 5) { BZ.toast('حداکثر ۵ بازیگر'); return; } s.cast.push({ cid: addCast.value, x: 0.5 }); save(); drawCast(); drawLines(); })),
-        h('h4', null, 'متن نمایش (هر خط یک دیالوگ)'), lineBox, ro ? null : BZ.btn('+ خط جدید', () => { if (!s.cast.length) { BZ.toast('اول بازیگر اضافه کنید'); return; } s.lines.push({ who: 0, emo: 'neutral', act: '', text: '' }); save(); drawLines(); }),
+        propWrap, h('h4', null, 'متن نمایش (هر خط یک دیالوگ)'), lineBox, ro ? null : BZ.btn('+ خط جدید', () => { if (!s.cast.length) { BZ.toast('اول بازیگر اضافه کنید'); return; } s.lines.push({ who: 0, emo: 'neutral', act: '', text: '' }); save(); drawLines(); }),
         h('div', { class: 'r-ctrl' }, BZ.btn('کپی', () => create(s)), ro ? null : BZ.btn('حذف', () => { if (!confirm('این نمایش حذف شود؟')) return; BZ.lib.del('shows', s.id).then(() => { cur = BZ.lib.shows.find((q) => q.kind === 'script' && notTmp(q)); renderPicker(); renderEd(); pub.refresh(); }); })));
-      drawCast(); drawLines();
+      drawCast(); drawLines(); drawProps();
     }
     const play = BZ.btn('▶ پیش‌نمایش', () => { if (!cur) return; BZ.net.call('PUT', '/shows/' + cur.id, cur).then((r) => { if (!ok(r)) return; BZ.net.invalidate('prod_' + cur.id); pl.start(cur, 0); }); }, 'go');
     const exV = BZ.btn('⬇ خروجی ویدئو (WebM)', () => { if (!cur) return; exV.disabled = true; const sec = scriptLen(cur); exportShow(cur, true, sec, (p) => { prog.textContent = 'ضبط… ' + Math.round(p * 100) + '٪'; }, () => { exV.disabled = false; prog.textContent = ''; }); });
     const exA = BZ.btn('⬇ خروجی صدا (رادیو)', () => { if (!cur) return; exA.disabled = true; exportShow(cur, false, scriptLen(cur), (p) => { prog.textContent = 'ضبط… ' + Math.round(p * 100) + '٪'; }, () => { exA.disabled = false; prog.textContent = ''; }); });
     const root = card('کارگردانی نمایش', 'بازیگران (عروسک/گیاه) و دیالوگ‌ها را بنویسید. گفتار با مدل منبع–فیلتر ساخته می‌شود و دهان با همان زمان‌بندی هجاها حرکت می‌کند. سرور داخلی صحنه و صدا را جریان می‌دهد.',
       picker, h('div', { class: 'r-ctrl' }, BZ.btn('+ نمایش جدید', () => create())), cv, h('div', { class: 'r-ctrl' }, play, BZ.btn('■', () => pl.stop(), 'sm'), exV, exA), prog, ed, pub.el);
+    if (cur) cur = draftOf(cur);
     renderPicker(); renderEd(); pub.refresh();
-    BZ.bus.on('lib', () => { cur = (cur && BZ.lib.shows.find((x) => x.id === cur.id)) || BZ.lib.shows.find((q) => q.kind === 'script' && notTmp(q)); renderPicker(); pub.refresh(); });
+    BZ.bus.on('lib', () => { if (!(cur && cur._draft)) cur = (cur && BZ.lib.shows.find((x) => x.id === cur.id)) || BZ.lib.shows.find((q) => q.kind === 'script' && notTmp(q)); renderPicker(); pub.refresh(); });
     return { el: root, paint: (now) => pl.paint(now) };
   }
 
@@ -220,10 +244,11 @@
     const cv = BZ.cv(480, 360, 'scope'), pl = Player(cv);
     const picker = h('div', { class: 'chips' }), ed = h('div'), pub = publishBox(() => cur), insp = h('div', { class: 'etable' }), prog = h('div', { class: 'note' });
     let lastIns = 0;
-    const save = () => { if (cur && !cur.builtin) BZ.lib.putShow(cur); };
+    const save = () => { if (!cur) return; if (cur._draft) { delete cur._draft; cur.epoch = Math.floor(W.time); BZ.lib.shows.push(cur); renderPicker(); pub.refresh(); } BZ.lib.putShow(cur); };
+    const draftOf = (x) => { if (!x.builtin) return x; const d = JSON.parse(JSON.stringify(x)); d._src = x.id; d.id = 'l_' + BZ.uid('x'); d.builtin = false; d._draft = true; d.name = x.name + ' (من)'; d.epoch = Math.floor(W.time); return d; };
     function renderPicker() {
       picker.innerHTML = '';
-      BZ.lib.shows.filter((s) => s.kind === 'life' && notTmp(s)).forEach((s) => picker.append(h('button', { type: 'button', class: 'chip' + (s === cur ? ' on' : ''), onclick: () => { cur = s; pl.stop(); renderPicker(); renderEd(); pub.refresh(); } }, '🏠 ' + s.name)));
+      BZ.lib.shows.filter((s) => s.kind === 'life' && notTmp(s)).forEach((s) => picker.append(h('button', { type: 'button', class: 'chip' + (cur && (s === cur || cur._src === s.id) ? ' on' : ''), onclick: () => { cur = draftOf(s); pl.stop(); renderPicker(); renderEd(); pub.refresh(); } }, '🏠 ' + s.name)));
     }
     function create(from) {
       const s = from ? JSON.parse(JSON.stringify(from)) : { name: 'زندگی جدید', kind: 'life', seed: BZ.uid('l'), title: 'زندگی جدید', music: { style: 'ambient', vol: 0.18, root: 45, scale: 'dorian' }, life: { hour: 7, agents: ['c_pashmi', 'c_jojo'], plants: ['c_laleh', 'c_cactus'] } };
@@ -233,12 +258,12 @@
     }
     function renderEd() {
       ed.innerHTML = ''; if (!cur) return;
-      const s = cur, ro = !!s.builtin, L = s.life, pups = BZ.lib.chars.filter((c) => c.type === 'puppet' && notTmp(c)), pls = BZ.lib.chars.filter((c) => c.type === 'plant' && notTmp(c));
+      const s = cur, ro = false, L = s.life, pups = BZ.lib.chars.filter((c) => c.type === 'puppet' && notTmp(c)), pls = BZ.lib.chars.filter((c) => c.type === 'plant' && notTmp(c));
       const chk = (c, arr, max) => { const b = BZ.toggle(c.name, arr.includes(c.id), (v) => { if (ro) { b.set(!v); return; } if (v) { if (arr.length >= max) { b.set(false); BZ.toast('حداکثر ' + max); return; } arr.push(c.id); } else arr.splice(arr.indexOf(c.id), 1); save(); BZ.net.invalidate('prod_' + s.id); }); return b; };
       const nameI = h('input', { type: 'text', class: 'inp', value: s.name, disabled: ro }); nameI.addEventListener('input', () => { s.name = nameI.value; s.title = nameI.value; save(); });
       const hour = BZ.slider({ label: 'ساعت شروع زندگی', min: 0, max: 23, step: 1, value: L.hour == null ? 7 : L.hour, fmt: (v) => v + ':00', onInput: (v) => { if (ro) return; L.hour = v; save(); } });
       ed.append(
-        ro ? h('p', { class: 'note strong' }, 'این نمایش داخلی است؛ برای ویرایش «کپی» بسازید.') : null,
+        s._draft ? h('p', { class: 'note strong' }, 'این زندگی داخلی است؛ با اولین تغییر، نسخهٔ شخصی شما ساخته می‌شود.') : null,
         h('div', { class: 'fgrid' }, fld('نام', nameI)), hour,
         h('h4', null, 'ساکنان خانه (حداکثر ۴ عروسک)'), h('div', { class: 'r-ctrl' }, pups.map((c) => chk(c, L.agents, 4))),
         h('h4', null, 'گیاهان باغ (حداکثر ۴)'), h('div', { class: 'r-ctrl' }, pls.map((c) => chk(c, L.plants, 4))),
@@ -257,8 +282,9 @@
     }
     const root = card('زندگی: شبیه‌ساز خانه و باغ', 'ساکنان نیازهایی دارند (انرژی، سیری، سرگرمی، معاشرت) که با گذر زمان کم می‌شود؛ هر کدام با «تابع مطلوبیت» تصمیم می‌گیرند چه کنند. گیاهان با نور روز و آب رشد می‌کنند و بدون آب پژمرده می‌شوند. همه‌چیز در سرور داخلی و قطعی (قابل‌تکرار) اجرا می‌شود؛ هر ثانیهٔ واقعی = ۲ دقیقهٔ زندگی.',
       picker, h('div', { class: 'r-ctrl' }, BZ.btn('+ زندگی جدید', () => create())), cv, h('div', { class: 'r-ctrl' }, play, BZ.btn('■', () => pl.stop(), 'sm'), exV), prog, h('h4', null, 'وضعیت درونی (از سرور)'), insp, ed, pub.el);
+    if (cur) cur = draftOf(cur);
     renderPicker(); renderEd(); pub.refresh();
-    BZ.bus.on('lib', () => { cur = (cur && BZ.lib.shows.find((x) => x.id === cur.id)) || BZ.lib.shows.find((q) => q.kind === 'life' && notTmp(q)); renderPicker(); pub.refresh(); });
+    BZ.bus.on('lib', () => { if (!(cur && cur._draft)) cur = (cur && BZ.lib.shows.find((x) => x.id === cur.id)) || BZ.lib.shows.find((q) => q.kind === 'life' && notTmp(q)); renderPicker(); pub.refresh(); });
     return {
       el: root, paint(now) {
         pl.paint(now);
