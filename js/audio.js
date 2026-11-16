@@ -145,21 +145,12 @@
         else if (k === 'tontak') noiseHit(ctx, dest, when, 0.07, 'bandpass', 3400 * r, 2.5, g);
         return;
       }
-      if (e.talk) {
-        const f = e.f0 * r, g = ctx.createGain(), end = when + dur + 0.05;
-        g.gain.setValueAtTime(0.0001, when); g.gain.linearRampToValueAtTime(e.g * 0.35, when + dur * 0.25);
-        g.gain.setValueAtTime(e.g * 0.3, when + dur * 0.7); g.gain.linearRampToValueAtTime(0.0001, end);
-        g.connect(dest);
-        const o = ctx.createOscillator(); o.type = 'sawtooth';
-        o.frequency.setValueAtTime(f, when); o.frequency.linearRampToValueAtTime(f * (e.fe || 0.88), end);
-        if (e.cons === 'f') noiseHit(ctx, dest, when, 0.1, 'highpass', 4800, 0.7, 0.16);
-        else if (e.cons === 'p') noiseHit(ctx, dest, when, 0.035, 'bandpass', 1500, 1, 0.2);
-        [[e.f1, 6, 1], [e.f2, 8, 0.6]].forEach(([fr, q, gain]) => {
-          const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = fr; bp.Q.value = q;
-          const gg = ctx.createGain(); gg.gain.value = gain; o.connect(bp); bp.connect(gg); gg.connect(g);
-        });
-        o.start(when); o.stop(end);
-        if (e.g > 0.7) noiseHit(ctx, dest, when, 0.06, 'highpass', 5000, 0.7, 0.05);
+      if (e.say) {
+        const buf = BZ.speech.buffer(ctx, e.say), src = ctx.createBufferSource(), g = ctx.createGain();
+        src.buffer = buf; src.playbackRate.value = r; g.gain.value = e.g || 0.8;
+        src.connect(g); g.connect(dest);
+        const off = Math.min(e.off || 0, Math.max(0, buf.duration - 0.01));
+        src.start(Math.max(when, ctx.currentTime), off, Math.max(0.02, (e.len || buf.duration) + 0.03));
         return;
       }
       if (e.tone) {

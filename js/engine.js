@@ -243,15 +243,14 @@
       return { k: 'l', t: simT, set: 'house', cam: { z: 1, x: 0.5, y: 0.5 }, actors, sub, title: simT < 5 ? (s.title || '') : '', hud: { hour: h, day: st.day } };
     }
     // ---- صدا: رویدادهای یک میزان (۲ ثانیه، ۱۲۰ bpm) ----
-    speechEv(cid, syl, k, n, q, emo, at0, w0) {
-      const ch = this.char(cid), v = ch.voice || {}, base = v.pitch || 180;
-      const em = { happy: 1.08, sad: 0.92, angry: 1.0, surprised: 1.15, thinking: 0.97, neutral: 1 }[emo] || 1;
+    // گفتار: یک رویداد برای هر جمله در هر میزان؛ موج را کلاینت از همین متن می‌سازد (TTS آفلاین)
+    utterEv(cid, text, sp, emo, at, dur, w0, evs) {
+      const lo = Math.max(at, w0), hi = Math.min(at + dur, w0 + 2);
+      if (hi <= lo) return;
+      const ch = this.char(cid), v = ch.voice || {};
       const gm = { happy: 1, sad: 0.8, angry: 1.15, surprised: 1.1, thinking: 0.9, neutral: 1 }[emo] || 1;
-      const pr = n > 1 ? k / (n - 1) : 0;
-      let f0 = base * em * (1 - 0.1 * pr) * (1 + 0.04 * Math.sin(k * 1.7));
-      if (q && pr > 0.7) f0 *= 1 + (pr - 0.7) * 1.5;
-      const V = BZ.speech.VOW[syl.v] || BZ.speech.VOW.e;
-      return { b: (at0 - w0) / 0.5, d: syl.d / 0.5, talk: 1, f0, fe: q && pr > 0.8 ? 1.08 : 0.9, f1: V.f1 * (ch.type === 'plant' ? 0.92 : 1), f2: V.f2, g: (k === 0 ? 0.85 : 0.72) * gm, cons: syl.c };
+      const vt = v.tract || (ch.type === 'plant' ? 0.93 : 1);
+      evs.push({ b: (lo - w0) / 0.5, d: (hi - lo) / 0.5, off: lo - at, len: hi - lo, g: 0.8 * gm, say: { t: text, sp, f0: v.pitch || 180, vt, em: emo || 'neutral', rob: ch.body === 'box' } });
     }
     bar(s, idx) {
       const w0 = idx * 2, evs = [];
@@ -264,16 +263,13 @@
             if (u.at < a0 || u.at >= a1) return;
             const cid = u.who.k === 'a' ? st.agents[u.who.i].cid : st.plants[u.who.i].cid;
             const pl = BZ.speech.plan(u.text, u.sp || 1), at = ep + u.at / SPS;
-            pl.syl.forEach((sy, k) => evs.push(this.speechEv(cid, sy, k, pl.syl.length, pl.q, 'neutral', at + sy.t, w0)));
+            this.utterEv(cid, u.text, u.sp || 1, 'neutral', at, pl.dur, w0, evs);
           });
         }
       } else {
         const C = this.compile(s), W0 = w0 % C.dur;
         C.lines.forEach((ln) => {
-          ln.syl.forEach((sy, k) => {
-            const ta = ln.start + sy.t;
-            if (ta >= W0 && ta < W0 + 2) evs.push(this.speechEv(ln.cid, sy, k, ln.syl.length, ln.q, ln.emo, ta, W0));
-          });
+          this.utterEv(ln.cid, ln.text, ((this.char(ln.cid).voice || {}).speed) || 1, ln.emo, ln.start, ln.end - ln.start, W0, evs);
         });
       }
       const m = s.music;

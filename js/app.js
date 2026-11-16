@@ -15,7 +15,7 @@
   const views = {};
   let cur = 'home';
 
-  const cabinet = (cls, title, sub, body) => h('div', { class: 'cab ' + cls }, h('div', { class: 'cab-head' }, h('h2', null, title), h('span', null, sub)), body);
+  const cabinet = (cls, title, sub, body) => { const c = h('div', { class: 'cab ' + cls }, h('div', { class: 'cab-head' }, h('h2', null, title), h('span', null, sub)), body); if (body.paint) c.paint = (now) => body.paint(now); return c; };
 
   function homeView() {
     const tiles = {};
@@ -63,8 +63,10 @@
   views.tv = { build: () => cabinet('tvcab', 'تلویزیون', 'لامپی (CRT) • PAL/NTSC', BZ.tvPanel(BZ.tv)) };
   views.vcr = { build: () => cabinet('vcrcab', 'ویدئوی نواری', 'ضبط • پخش • زمان‌بندی • ردیابی', BZ.vcrPanel(BZ.vcr)) };
   views.hifi = { build: () => cabinet('hifi', 'هایفای استریو', 'تیونر • CD • گرامافون • آمپلی‌فایر', BZ.hifiPanel(BZ.hifi)) };
+  views.pyramid = { build: () => cabinet('wood', 'هرم ۵۳', 'آینه • نور • شتاب ثابت • ربات سخنگو', BZ.pyramidPanel()) };
+  views.worlds = { build: () => cabinet('tvcab', 'جهان‌های تو در تو', 'آینه = تلویزیون • پیکسل • گرانش • رادیو', BZ.worldsPanel()) };
   views.lab = { build: () => BZ.labPanel() };
-  views.studio = { build: () => { const p = BZ.directorPanel(), c = cabinet('wood', 'استودیو', 'عروسک و گیاه • کارگردانی • زندگی • سرور داخلی', p); c.paint = p.paint; return c; } };
+  views.studio = { build: () => { const p = BZ.directorPanel(), c = cabinet('wood', 'استودیو', 'عروسک و گیاه • کارگردانی • زندگی • سرور داخلی', p); return c; } };
 
   function show(id) {
     cur = id; BZ.store.set('view', id);
@@ -76,7 +78,7 @@
   }
   BZ.show = show;
 
-  [['home', '🏠', 'اتاق'], ['radio', '📻', 'رادیو'], ['tv', '📺', 'تلویزیون'], ['vcr', '📼', 'ویدئو'], ['hifi', '🎛', 'هایفای'], ['studio', '🎬', 'استودیو'], ['lab', '🧪', 'آزمایشگاه']].forEach(([id, ic, name]) => {
+  [['home', '🏠', 'اتاق'], ['radio', '📻', 'رادیو'], ['tv', '📺', 'تلویزیون'], ['vcr', '📼', 'ویدئو'], ['hifi', '🎛', 'هایفای'], ['studio', '🎬', 'استودیو'], ['pyramid', '🪞', 'هرم'], ['worlds', '🌀', 'جهان‌ها'], ['lab', '🧪', 'آزمایشگاه']].forEach(([id, ic, name]) => {
     const b = h('button', { type: 'button', class: 'navb', onclick: () => show(id) }, h('span', null, ic), name); b._id = id; nav.append(b);
   });
 

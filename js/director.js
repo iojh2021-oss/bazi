@@ -118,18 +118,19 @@
       ed.innerHTML = ''; if (!cur) return;
       const c = cur, ro = false;
       const inp = (key, type) => { const i = h('input', { type: type || 'text', class: 'inp', value: c[key] == null ? '' : c[key], disabled: ro }); i.addEventListener('input', () => { c[key] = i.value; save(); renderList(); }); return i; };
-      const sl = (label, key, min, max, step, fmt, path) => BZ.slider({ label, min, max, step, value: path ? c.voice[key] : (c[key] == null ? 0.5 : c[key]), fmt, onInput: (v) => { if (ro) return; if (path) c.voice[key] = v; else c[key] = v; save(); } });
+      const sl = (label, key, min, max, step, fmt, path) => BZ.slider({ label, min, max, step, value: path ? (c.voice[key] == null ? 1 : c.voice[key]) : (c[key] == null ? 0.5 : c[key]), fmt, onInput: (v) => { if (ro) return; if (path) c.voice[key] = v; else c[key] = v; save(); } });
       const clr = (key) => { const i = h('input', { type: 'color', class: 'inp clr', value: c[key] || '#888888', disabled: ro }); i.addEventListener('input', () => { c[key] = i.value; save(); }); return i; };
       const sel = (opts, key) => { const s = BZ.select(opts, c[key] || opts[0].v, (v) => { c[key] = v; save(); }); s.disabled = ro; return s; };
       ed.append(
         c._draft ? h('p', { class: 'note strong' }, 'این شخصیت داخلی است؛ با اولین تغییر، نسخهٔ شخصی شما ساخته و ذخیره می‌شود.') : null,
         h('div', { class: 'fgrid' }, fld('نام', inp('name')), c.type === 'plant' ? fld('گونه', sel(SPEC_OPTS, 'species')) : fld('بدنه', sel(BODY_OPTS, 'body')), c.type === 'puppet' ? fld('گوش/آنتن', sel(EARS_OPTS, 'ears')) : null, fld('رنگ اصلی', clr('color')), fld(c.type === 'plant' ? 'رنگ گلدان' : 'رنگ فرعی', clr('accent'))),
-        h('div', { class: 'sl-grid' }, sl('اندازهٔ چشم', 'eyes', 0, 1, 0.05, (v) => v.toFixed(2)), sl('فاصلهٔ چشم‌ها', 'eyeGap', 0, 1, 0.05, (v) => v.toFixed(2)), sl('اندازه', 'size', 0.6, 1.5, 0.05, (v) => v.toFixed(2)), sl('زیر و بمی صدا', 'pitch', 70, 400, 5, (v) => v + ' Hz', true), sl('سرعت گفتار', 'speed', 0.6, 1.6, 0.05, (v) => v.toFixed(2) + '×', true)),
+        h('div', { class: 'sl-grid' }, sl('اندازهٔ چشم', 'eyes', 0, 1, 0.05, (v) => v.toFixed(2)), sl('فاصلهٔ چشم‌ها', 'eyeGap', 0, 1, 0.05, (v) => v.toFixed(2)), sl('اندازه', 'size', 0.6, 1.5, 0.05, (v) => v.toFixed(2)), sl('زیر و بمی صدا', 'pitch', 70, 400, 5, (v) => v + ' Hz', true), sl('سرعت گفتار', 'speed', 0.6, 1.6, 0.05, (v) => v.toFixed(2) + '×', true), sl('طول مجرای صوتی (فرمانت‌ها)', 'tract', 0.8, 1.3, 0.02, (v) => v.toFixed(2) + '×', true)),
         h('p', { class: 'note' }, c.type === 'plant' ? 'گیاه: ساقه با ترکیب سه نوسان باد تکان می‌خورد؛ در «زندگی» رشد می‌کند و بدون آب پژمرده می‌شود.' : 'عروسک: بازوی دو‌مفصلی (FK)، تنفس، پلک‌زدن، ابرو و دهان؛ شکل دهان از ویزم واکه‌ها می‌آید.'),
         h('div', { class: 'r-ctrl' }, BZ.btn('کپی', () => create(c.type, c)), ro ? null : BZ.btn('حذف', () => { if (!confirm('این شخصیت حذف شود؟')) return; const id = c.id; BZ.lib.del('chars', id).then(() => { cur = BZ.lib.chars.find(notTmp); renderList(); renderEd(); }); })));
     }
     const emoSeg = BZ.seg(EMO_OPTS, emo, (v) => { emo = v; });
-    const sayI = h('input', { type: 'text', class: 'inp', value: sayText, style: { flex: '1', minWidth: '180px' } }); sayI.addEventListener('input', () => { sayText = sayI.value; });
+    const sayI = h('input', { type: 'text', class: 'inp', value: sayText, style: { flex: '1', minWidth: '180px' } }); sayI.addEventListener('input', () => { sayText = sayI.value; phon.textContent = 'آوانویسی: ' + BZ.speech.transcribe(sayText); });
+    const phon = h('div', { class: 'note' }, 'آوانویسی: ' + BZ.speech.transcribe(sayText));
     const say = BZ.btn('🗣 بگو', () => {
       if (!cur) return;
       const tmp = { id: 'tmp_char', name: 'پیش‌نمایش', kind: 'script', seed: 'tmp', set: 'stage', camera: 'auto', title: '', music: { style: '', vol: 0 }, cast: [{ cid: cur.id, x: 0.5 }], lines: [{ who: 0, emo, act: '', text: sayText }] };
@@ -137,7 +138,7 @@
     }, 'go');
     const root = card('کارگاه عروسک و گیاه', 'شخصیت بسازید و صدایش را آزمایش کنید. هر تغییر روی سرور داخلی ذخیره می‌شود و در نمایش‌ها و «زندگی» استفاده می‌شود.',
       list, h('div', { class: 'r-ctrl' }, BZ.btn('+ عروسک', () => create('puppet')), BZ.btn('+ گیاه', () => create('plant'))), cv,
-      h('div', { class: 'r-ctrl' }, emoSeg), h('div', { class: 'r-ctrl' }, sayI, say, BZ.btn('■', () => pl.stop(), 'sm')), ed);
+      h('div', { class: 'r-ctrl' }, emoSeg), h('div', { class: 'r-ctrl' }, sayI, say, BZ.btn('■', () => pl.stop(), 'sm')), phon, ed);
     if (cur) cur = draftOf(cur);
     renderList(); renderEd();
     BZ.bus.on('lib', () => { if (!(cur && cur._draft)) { cur = (cur && BZ.lib.chars.find((x) => x.id === cur.id)) || BZ.lib.chars.find(notTmp); renderEd(); } renderList(); });
@@ -335,7 +336,9 @@
 
   // ---------- آزمون‌های سرور داخلی و موتور محتوا ----------
   BZ.extraTests = [
-    ['گفتار: برنامهٔ هجا قطعی است و دهان با آن هم‌زمان', () => { const a = BZ.speech.plan('سلام، حال شما چطور است؟', 1), b = BZ.speech.plan('سلام، حال شما چطور است؟', 1); const m = BZ.speech.mouthAt(a.syl, a.syl[0].t + a.syl[0].d / 2); return [JSON.stringify(a) === JSON.stringify(b) && a.syl.length > 3 && m.open > 0.1, a.syl.length + ' هجا']; }],
+    ['TTS: آوانویسی فارسی/انگلیسی درست و قطعی', () => { const a = BZ.speech.transcribe('سلام'), b = BZ.speech.transcribe('hello'), c = BZ.speech.transcribe('کتاب'); return [a === 's a l A m' && b === 'h AX l OW' && c === 'k e t A b', a + ' | ' + b + ' | ' + c]; }],
+    ['TTS: موج صوتی محدود، غیرصفر و هم‌مدت با طرح', () => { const p = BZ.speech.plan('سلام دنیا', 1), w = BZ.speech.render(p, { f0: 150 }); let pk = 0, ok2 = true; for (let i = 0; i < w.length; i++) { if (!isFinite(w[i])) ok2 = false; pk = Math.max(pk, Math.abs(w[i])); } return [ok2 && pk > 0.3 && Math.abs(w.length / BZ.speech.SR - p.dur) < 0.02, 'اوج ' + pk.toFixed(2)]; }],
+    ['TTS: دهان با واکه‌ها باز و در دوبله‌ها (m) بسته می‌شود', () => { const p = BZ.speech.plan('ما', 1), m = p.syl.find((s) => s.c === 'm'), a = p.syl.find((s) => s.vow); const om = BZ.speech.mouthAt(p.syl, m.t + m.d * 0.9).open, oa = BZ.speech.mouthAt(p.syl, a.t + a.d * 0.6).open; return [oa > 0.5 && om < 0.3, 'a=' + oa.toFixed(2) + ' m=' + om.toFixed(2)]; }],
     ['موتور: زندگی قطعی و دسترسی تصادفی = ترتیبی', () => { const s = BZ.lib.show('show_life'); if (!s) return [false, 'نمایش زندگی نیست']; const E1 = new BZ.Engine(BZ.lib), E2 = new BZ.Engine(BZ.lib); const t = s.epoch + 900; const a = JSON.stringify(E1.scene(s, t)), b = JSON.stringify(E2.scene(s, t)); return [a === b, 'برابر']; }],
     ['موتور: نیازها در بازهٔ [۰،۱] و گیاه رشد می‌کند', () => { const s = BZ.lib.show('show_life'), E = new BZ.Engine(BZ.lib), i0 = E.inspect(s, s.epoch + 1), i1 = E.inspect(s, s.epoch + 400); const okN = i1.agents.every((a) => Object.values(a.n).every((v) => v >= 0 && v <= 1)); return [okN && i1.plants.every((p, i) => p.grow >= i0.plants[i].grow), 'ساعت ' + i1.hour.toFixed(1)]; }],
     ['موتور: میزان‌های صوتی نمایش قطعی‌اند', () => { const s = BZ.lib.show('show_talk'), E = new BZ.Engine(BZ.lib); return [JSON.stringify(E.bar(s, 3)) === JSON.stringify(new BZ.Engine(BZ.lib).bar(s, 3)), 'برابر']; }],
