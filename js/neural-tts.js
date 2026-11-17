@@ -11,8 +11,13 @@
   const PATHS = {
     ortJs: U('models/ort/ort.wasm.min.js'), ortDir: U('models/ort/'),
     phJs: U('models/phonemize/piper_phonemize.js'), phDir: U('models/phonemize/'),
-    model: U('models/piper/fa_IR-amir-medium.onnx'), conf: U('models/piper/fa_IR-amir-medium.onnx.json'),
   };
+  // صداهای فارسی Piper (هر کدام دو فایل در models/piper/ دارند؛ با get-voices.sh دانلود می‌شوند)
+  const VOICES = [['amir', 'امیر'], ['reza_ibrahim', 'رضا'], ['ganji', 'گنجی'], ['ganji_adabi', 'گنجی (ادبی)'], ['gyro', 'گایرو'], ['magnoliasis', 'مگنولیا']];
+  let voice = BZ.store.get('ntts_voice', 'amir');
+  if (!VOICES.some((v) => v[0] === voice)) voice = 'amir';
+  const vModel = () => U('models/piper/fa_IR-' + voice + '-medium.onnx');
+  const vConf = () => vModel() + '.json';
   const S = { cfg: null, sess: null, loading: null, ready: false, err: '' };
   const cache = new Map();          // text|sp|k  ←  {pcm, dur}
   const durByText = new Map();      // text|sp  ←  مدت صدای عصبی (برای هماهنگی لب)
@@ -41,9 +46,9 @@
       say('آوانگار (espeak-ng)…');
       if (typeof window.createPiperPhonemize !== 'function') await loadScript(PATHS.phJs);
       say('تنظیمات صدا…');
-      S.cfg = await getJSON(PATHS.conf);
+      S.cfg = await getJSON(vConf());
       say('مدل صدا (حدود ۶۱ مگابایت)…');
-      S.sess = await window.ort.InferenceSession.create(await getBuf(PATHS.model), { executionProviders: ['wasm'] });
+      S.sess = await window.ort.InferenceSession.create(await getBuf(vModel()), { executionProviders: ['wasm'] });
       S.ready = true; S.err = ''; say('آماده');
       return true;
     })().catch((e) => { S.loading = null; S.err = String(e && e.message || e); throw e; });
@@ -92,7 +97,7 @@
   }
 
   const pitchK = (f0) => BZ.clamp(Math.pow((f0 || 160) / 160, 0.4), 0.75, 1.35);
-  const keyOf = (text, sp, k) => text + '|' + sp + '|' + k.toFixed(2);
+  const keyOf = (text, sp, k) => voice + '|' + text + '|' + sp + '|' + k.toFixed(2);
 
   // تولید صدا: {pcm: Float32Array, sr, dur}
   async function synth(text, opt) {
@@ -107,7 +112,7 @@
     const all = new Float32Array(n); let o = 0; parts.forEach((p) => { all.set(p, o); o += p.length; });
     const sr = (S.cfg.audio && S.cfg.audio.sample_rate) || SR_DEFAULT, pcm = resample(all, k), r = { pcm, sr, dur: pcm.length / sr };
     if (cache.size > 40) cache.clear();
-    cache.set(key, r); durByText.set(text + '|' + sp, r.dur);
+    cache.set(key, r); durByText.set(voice + '|' + text + '|' + sp, r.dur);
     return r;
   }
 
@@ -130,9 +135,9 @@
     return origBuffer.apply(SP, arguments);
   };
   SP.plan = function (text, speed) {
-    const p = origPlan.apply(SP, arguments), sp = BZ.clamp(speed || 1, 0.5, 2), d = flag.on ? durByText.get(text + '|' + sp) : 0;
+    const p = origPlan.apply(SP, arguments), sp = BZ.clamp(speed || 1, 0.5, 2), d = flag.on ? durByText.get(voice + '|' + text + '|' + sp) : 0;
     if (!d || !p.syl || !p.syl.length) return p;
-    const ck = text + '|' + sp + '|' + d.toFixed(3);
+    const ck = voice + '|' + text + '|' + sp + '|' + d.toFixed(3);
     let q = planCache.get(ck);
     if (!q) {
       const f = d / p.dur;   // کشیدن زمان‌بندی لب به مدت صدای عصبی
@@ -143,6 +148,9 @@
   };
 
   BZ.ntts = {
+    voices: VOICES, get voice() { return voice; },
+    // تغییر صدا: مدل قبلی آزاد و در بارگذاری بعدی مدل تازه خوانده می‌شود
+    setVoice(id) { if (id === voice || !VOICES.some((v) => v[0] === id)) return; voice = id; BZ.store.set('ntts_voice', id); try { if (S.sess && S.sess.release) S.sess.release(); } catch (e) { /* مهم نیست */ } S.sess = null; S.cfg = null; S.ready = false; S.loading = null; S.err = ''; },
     init, synth, play, splitSentences, resample, pitchK, _S: S,
     get ready() { return S.ready; }, get error() { return S.err; },
     get forChars() { return flag.on; }, setForChars(v) { flag.on = !!v; BZ.store.set('ntts_chars', flag.on); },
@@ -160,6 +168,9 @@
     const setSt = (m) => { st.textContent = m; };
     const fail = (e) => { setSt('خطا: ' + (e && e.message || e)); BZ.toast('خطا در صدای عصبی'); console.error(e); };
     const load = BZ.btn('بارگذاری موتور صدا', () => { load.disabled = true; init(setSt).then(() => { load.textContent = 'موتور آماده است'; }).catch((e) => { load.disabled = false; fail(e); }); }, 'go');
+    const sel = BZ.select(VOICES.map((v) => ({ v: v[0], t: v[1] })), voice, (id) => {
+      BZ.ntts.setVoice(id); load.disabled = false; load.textContent = 'بارگذاری موتور صدا'; setSt('صدا عوض شد؛ دوباره «بارگذاری موتور صدا» را بزنید. اگر فایل آن صدا در برنامه نیست، با get-voices.sh دانلودش کنید.');
+    });
     const speakN = BZ.btn('🗣 پخش با صدای عصبی', async () => {
       try { setSt('در حال ساخت صدا…'); const t0 = performance.now(), r = await synth(ta.value, { speed, f0 }); play(r); setSt('ساخته شد: ' + r.dur.toFixed(1) + ' ثانیه صدا در ' + ((performance.now() - t0) / 1000).toFixed(1) + ' ثانیه'); } catch (e) { fail(e); }
     });
@@ -170,7 +181,7 @@
     return h('div', { class: 'panel' },
       h('h3', null, 'گفتار عصبی آفلاین (Piper)'),
       BZ.note('هر متنی بنویسید و بشنوید. صدای فعلی برنامه حذف یا عوض نشده و همچنان پیش‌فرض است.'),
-      ta, sl1, sl2, st,
+      h('label', { class: 'note' }, 'صدا: ', sel), ta, sl1, sl2, st,
       h('div', { class: 'r-ctrl' }, load, speakN, speakK),
       h('label', { class: 'note' }, chk, ' استفاده در شخصیت‌ها (آزمایشی؛ فقط برای جمله‌هایی که از قبل ساخته شده‌اند)'));
   };
