@@ -18,6 +18,7 @@ jobs:
         run: |
           mkdir -p www
           cp -r index.html manifest.json sw.js icon.svg icon-192.png icon-512.png css js www/
+          cp -r models www/
       - name: Capacitor project
         run: |
           npm init -y
