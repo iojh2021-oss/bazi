@@ -66,6 +66,7 @@
   views.pyramid = { build: () => cabinet('wood', 'هرم ۵۳', 'آینه • نور • شتاب ثابت • ربات سخنگو', BZ.pyramidPanel()) };
   views.worlds = { build: () => cabinet('tvcab', 'جهان‌های تو در تو', 'آینه = تلویزیون • پیکسل • گرانش • رادیو', BZ.worldsPanel()) };
   views.lab = { build: () => BZ.labPanel() };
+  views.voice = { build: () => cabinet('wood', 'صدای عصبی', 'گفتار آفلاین با کیفیت بالا • Piper', BZ.nttsPanel()) };
   views.studio = { build: () => { const p = BZ.directorPanel(), c = cabinet('wood', 'استودیو', 'عروسک و گیاه • کارگردانی • زندگی • سرور داخلی', p); return c; } };
 
   function show(id) {
@@ -78,7 +79,7 @@
   }
   BZ.show = show;
 
-  [['home', '🏠', 'اتاق'], ['radio', '📻', 'رادیو'], ['tv', '📺', 'تلویزیون'], ['vcr', '📼', 'ویدئو'], ['hifi', '🎛', 'هایفای'], ['studio', '🎬', 'استودیو'], ['pyramid', '🪞', 'هرم'], ['worlds', '🌀', 'جهان‌ها'], ['lab', '🧪', 'آزمایشگاه']].forEach(([id, ic, name]) => {
+  [['home', '🏠', 'اتاق'], ['radio', '📻', 'رادیو'], ['tv', '📺', 'تلویزیون'], ['vcr', '📼', 'ویدئو'], ['hifi', '🎛', 'هایفای'], ['studio', '🎬', 'استودیو'], ['pyramid', '🪞', 'هرم'], ['worlds', '🌀', 'جهان‌ها'], ['lab', '🧪', 'آزمایشگاه'], ['voice', '🗣', 'صدا']].forEach(([id, ic, name]) => {
     const b = h('button', { type: 'button', class: 'navb', onclick: () => show(id) }, h('span', null, ic), name); b._id = id; nav.append(b);
   });
 
