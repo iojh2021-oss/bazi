@@ -83,7 +83,7 @@
   BZ.worldsPanel = function () {
     const CW = 560, CH = 960, SW = 192, SH = 144;
     const cv = BZ.cv(CW, CH, 'scope'), g = cv.getContext('2d');
-    const scn = [], ras = [];
+    const scn = [], ras = [], mids = [];
     for (let i = 0; i < 7; i++) { scn.push(BZ.cv(SW, SH)); const L = LINES[i]; ras.push(BZ.cv(colsOf(L), L)); }
     const bodies = [Body(REAL.g)].concat(WORLDS.map((w) => Body(w.g)));
     const P = { x: 0.2, dir: 1, emo: 'neutral', mouth: { open: 0, v: 'e' } };
@@ -145,7 +145,7 @@
         const rg = ras[i].getContext('2d'); rg.imageSmoothingEnabled = true; rg.imageSmoothingQuality = 'high';
         // فیلتر پیش‌نمونه‌برداری: کوچک‌سازی چندمرحله‌ای (میانگین‌گیری) برای جلوگیری از نام‌همپوشانی
         let src = scn[i], w = SW, hh = SH; const tw = ras[i].width, th = ras[i].height;
-        if (w / tw > 2.2) { const mid = BZ.cv(Math.max(tw, Math.round(w / 2)), Math.max(th, Math.round(hh / 2))); const mg = mid.getContext('2d'); mg.imageSmoothingQuality = 'high'; mg.drawImage(src, 0, 0, mid.width, mid.height); src = mid; }
+        if (w / tw > 2.2) { const mid = mids[i] || (mids[i] = BZ.cv(Math.max(tw, Math.round(w / 2)), Math.max(th, Math.round(hh / 2)))); const mg = mid.getContext('2d'); mg.clearRect(0, 0, mid.width, mid.height); mg.imageSmoothingQuality = 'high'; mg.drawImage(src, 0, 0, mid.width, mid.height); src = mid; }
         rg.drawImage(src, 0, 0, tw, th);
       }
       // ---- جهان واقعی (۰): اتاق، تلویزیون بزرگ با خروجی جهان ۷ ----

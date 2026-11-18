@@ -49,18 +49,45 @@
     })().catch((e) => { S.loading = null; throw e; });
     return S.loading;
   }
+  // ----- Worker: ساخت صدا خارج از رشتهٔ رابط (اگر نشد، خودکار روی رشتهٔ اصلی) -----
+  const WK = { w: null, ok: null, n: 0, pend: new Map() };
+  function wcall(msg, ms) {
+    return new Promise((res, rej) => {
+      if (!WK.w) { try { WK.w = new Worker(U('js/ntts-worker.js')); } catch (e) { return rej(e); }
+        WK.w.onmessage = (ev) => { const d = ev.data, p = WK.pend.get(d.rid); if (!p) return; WK.pend.delete(d.rid); clearTimeout(p.t); d.ok ? p.res(d) : p.rej(new Error(d.error)); };
+        WK.w.onerror = (ev) => { WK.pend.forEach((p) => { clearTimeout(p.t); p.rej(new Error('worker: ' + (ev.message || 'خطا'))); }); WK.pend.clear(); }; }
+      const rid = ++WK.n, t = setTimeout(() => { WK.pend.delete(rid); rej(new Error('worker پاسخ نداد')); }, ms || 120000);
+      WK.pend.set(rid, { res, rej, t }); WK.w.postMessage(Object.assign({ rid }, msg));
+    });
+  }
+  function killWorker() { WK.ok = false; try { if (WK.w) WK.w.terminate(); } catch (e) { /* مهم نیست */ } WK.w = null; WK.pend.forEach((p) => clearTimeout(p.t)); WK.pend.clear(); }
+  async function loadViaWorker(id, v, say) {
+    say('موتور صدا (پس‌زمینه)…');
+    await wcall({ op: 'init', ortJs: PATHS.ortJs, ortDir: PATHS.ortDir, phJs: PATHS.phJs, phDir: PATHS.phDir }, 60000);
+    say('مدل صدا (حدود ۶۱ مگابایت)…');
+    const r = await wcall({ op: 'load', vid: id, conf: vConf(id), model: vModel(id) }, 180000);
+    v.cfg = r.cfg; v.remote = true; v.sess = { release() { wcall({ op: 'drop', vid: id }, 20000).catch(() => {}); } };
+    WK.ok = true;
+  }
+
   // بارگذاری یک صدا (مدل ~۶۱ مگابایت)
   function loadVoice(id, onStatus) {
     let v = V.get(id);
     if (v && v.sess) return Promise.resolve(v);
     if (v && v.loading) return v.loading;
-    v = v || {}; V.set(id, v);
+    v = v || {}; v.id = id; V.set(id, v);
     const say = (m) => { if (onStatus) onStatus(m); };
     v.loading = (async () => {
-      await initShared(say);
-      say('تنظیمات صدا…'); v.cfg = await getJSON(vConf(id));
-      say('مدل صدا (حدود ۶۱ مگابایت)…');
-      v.sess = await window.ort.InferenceSession.create(await getBuf(vModel(id)), { executionProviders: ['wasm'] });
+      let done = false;
+      if (WK.ok !== false && typeof Worker !== 'undefined') {
+        try { await loadViaWorker(id, v, say); done = true; } catch (e) { console.warn('ntts worker → رشتهٔ اصلی:', e && e.message); if (/پیدا نشد/.test(String(e && e.message))) throw e; killWorker(); }
+      }
+      if (!done) {
+        await initShared(say);
+        say('تنظیمات صدا…'); v.cfg = await getJSON(vConf(id));
+        say('مدل صدا (حدود ۶۱ مگابایت)…');
+        v.sess = await window.ort.InferenceSession.create(await getBuf(vModel(id)), { executionProviders: ['wasm'] });
+      }
       v.loading = null; S.err = ''; say('آماده');
       // حافظه: بیش از ۳ صدای هم‌زمان نگه نمی‌داریم
       const live = [...V.entries()].filter(([k, x]) => x.sess && k !== id);
@@ -101,6 +128,8 @@
   }
 
   async function synthOne(v, text, lengthScale) {
+    if (v.remote) { const r = await wcall({ op: 'run', vid: v.id, text, ls: lengthScale }, 90000); return r.pcm; }
+    await new Promise((r) => setTimeout(r, 0));   // به رابط فرصت نفس‌کشیدن بده
     const ids = await phonemeIds(text, v.cfg), T = window.ort.Tensor, inf = v.cfg.inference || {};
     const feeds = {
       input: new T('int64', BigInt64Array.from(ids.map((x) => BigInt(x))), [1, ids.length]),

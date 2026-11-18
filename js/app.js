@@ -109,10 +109,20 @@
   setInterval(() => BZ.vcr.on && BZ.vcr.save(), 5000);
 
   // ----- رسم -----
+  // حلقهٔ رسم با «تنظیم‌گر بار»: اگر رسم کند شد، به‌جای هنگ‌کردن نرخ فریم خودکار پایین می‌آید (برای گوشی‌های ضعیف)
+  const HEAVY = { pyramid: 33, worlds: 33 };   // تب‌های سنگین حداکثر ۳۰ فریم بر ثانیه
+  let lastPaint = 0, costAvg = 0;
   (function frame(now) {
-    const v = views[cur];
-    if (v && v.el && v.el.paint) { try { v.el.paint(now); } catch (e) { console.error(e); } }
     requestAnimationFrame(frame);
+    if (document.hidden || !gate.classList.contains('hide')) return;
+    const v = views[cur];
+    if (!v || !v.el || !v.el.paint) return;
+    const gap = Math.max(HEAVY[cur] || 0, costAvg > 24 ? 100 : costAvg > 14 ? 50 : costAvg > 8 ? 33 : 0);
+    if (now - lastPaint < gap - 4) return;
+    lastPaint = now;
+    const t0 = performance.now();
+    try { v.el.paint(now); } catch (e) { console.error(e); }
+    costAvg = costAvg * 0.85 + (performance.now() - t0) * 0.15;
   })(performance.now());
 
   window.addEventListener('error', (e) => BZ.toast('خطا: ' + (e.message || '')));

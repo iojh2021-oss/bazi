@@ -63,6 +63,12 @@
     return o;
   }
 
+  const prewarmQ = []; let prewarmT = 0;
+  function prewarm() {
+    prewarmT = 0; const say = prewarmQ.shift();
+    try { if (say && BZ.audio.ctx) BZ.speech.buffer(BZ.audio.ctx, say); } catch (e) { /* مهم نیست */ }
+    if (prewarmQ.length) prewarmT = setTimeout(prewarm, 40);
+  }
   // جریان زندهٔ یک برنامه از سرور: صحنه‌ها با ۲۰ هرتز، میزان‌های صوتی ۶ ثانیه جلوتر
   class Stream {
     constructor(pid, o) {
@@ -93,9 +99,17 @@
         r.body.scenes.forEach((s) => { if (s.t >= cut) { this.sc.push(s); this.st.pk++; } });
         this.sc.sort((a, b) => a.t - b.t);
         while (this.sc.length > 2 && this.sc[1].t < cut) this.sc.shift();
-        r.body.bars.forEach((b) => { this.bars.set(b.i, b.ev); if (BZ.ntts) b.ev.forEach((e) => { if (e.say) BZ.ntts.want(e.say); }); });   // صدای عصبی را چند ثانیه زودتر آماده کن
+        r.body.bars.forEach((b) => {
+          this.bars.set(b.i, b.ev);
+          b.ev.forEach((e) => {
+            if (!e.say) return;
+            if (BZ.ntts) BZ.ntts.want(e.say);
+            // ساخت موج گفتار را از مسیر پخش بیرون ببر و بین فریم‌ها پخش کن تا صدا/تصویر نلرزد
+            if (BZ.audio.ctx) { prewarmQ.push(e.say); if (!prewarmT) prewarmT = setTimeout(prewarm, 30); }
+          });
+        });   // صدای عصبی را چند ثانیه زودتر آماده کن
         for (const k of [...this.bars.keys()]) if (k < i0 - 2) this.bars.delete(k);
-        this.st.bytes += JSON.stringify(r.body).length;
+        this.st.bytes += r.body.scenes.length * 230 + r.body.bars.reduce((a, b) => a + b.ev.length * 90, 0);   // تخمین ارزان (بدون سریال‌سازی)
       });
     }
     has(i) { return this.bars.has(i); }

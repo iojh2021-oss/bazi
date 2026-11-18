@@ -161,7 +161,7 @@
         const n = Math.min(60, Math.max(0, b.n | 0)), dt = b.dt || 0.05, scenes = [], bars = [];
         for (let i = 0; i < n; i++) { const t = b.from + i * dt, sc = this.eng.scene(s, t); sc.t = t; scenes.push(sc); }
         (b.bars || []).slice(0, 6).forEach((i) => bars.push({ i, ev: this.eng.bar(s, i) }));
-        const res = { scenes, bars }; this.bytesOut += JSON.stringify(res).length;
+        const res = { scenes, bars }; this.bytesOut += scenes.length * 230 + bars.reduce((a, x) => a + x.ev.length * 90, 0);
         return ok(res);
       }
       return err(404, 'مسیر ناشناخته: ' + method + ' ' + path);

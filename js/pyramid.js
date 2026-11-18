@@ -179,7 +179,7 @@
     // ----- به‌روزرسانی فیزیک (هر فریم، با زیرگام‌های ثابت) -----
     let last = 0, hopsDone = 0;
     function step(dtReal) {
-      dtReal = Math.min(dtReal, 0.05) * speed;
+      dtReal = Math.min(dtReal, 0.12) * speed;
       if (st.phase === 'light') {
         st.light += dtReal / 2.2;
         if (st.light >= 1) { st.phase = 'run'; st.t = 0; st.x = X0; st.v = V0; st.cross = [0]; st.nodeIdx = 0; st.hop = null; }
