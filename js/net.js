@@ -93,7 +93,7 @@
         r.body.scenes.forEach((s) => { if (s.t >= cut) { this.sc.push(s); this.st.pk++; } });
         this.sc.sort((a, b) => a.t - b.t);
         while (this.sc.length > 2 && this.sc[1].t < cut) this.sc.shift();
-        r.body.bars.forEach((b) => this.bars.set(b.i, b.ev));
+        r.body.bars.forEach((b) => { this.bars.set(b.i, b.ev); if (BZ.ntts) b.ev.forEach((e) => { if (e.say) BZ.ntts.want(e.say); }); });   // صدای عصبی را چند ثانیه زودتر آماده کن
         for (const k of [...this.bars.keys()]) if (k < i0 - 2) this.bars.delete(k);
         this.st.bytes += JSON.stringify(r.body).length;
       });

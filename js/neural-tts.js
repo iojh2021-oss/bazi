@@ -16,13 +16,15 @@
   const VOICES = [['amir', 'امیر'], ['reza_ibrahim', 'رضا'], ['ganji', 'گنجی'], ['ganji_adabi', 'گنجی (ادبی)'], ['gyro', 'گایرو'], ['magnoliasis', 'مگنولیا']];
   let voice = BZ.store.get('ntts_voice', 'amir');
   if (!VOICES.some((v) => v[0] === voice)) voice = 'amir';
-  const vModel = () => U('models/piper/fa_IR-' + voice + '-medium.onnx');
-  const vConf = () => vModel() + '.json';
-  const S = { cfg: null, sess: null, loading: null, ready: false, err: '' };
-  const cache = new Map();          // text|sp|k  ←  {pcm, dur}
-  const durByText = new Map();      // text|sp  ←  مدت صدای عصبی (برای هماهنگی لب)
-  const planCache = new Map();
-  const SR_DEFAULT = 22050;
+  const vModel = (id) => U('models/piper/fa_IR-' + id + '-medium.onnx');
+  const vConf = (id) => vModel(id) + '.json';
+  const V = new Map();              // شناسهٔ صدا ← {cfg, sess, loading}
+  const S = { loading: null, err: '' };   // وضعیت مشترک (ort + آوانگار)
+  const cache = new Map();          // کلید ← {pcm, sr, dur}
+  const failed = new Set();         // کلیدهایی که ساخته نشدند (دوباره تلاش نمی‌شود)
+  const SR_DEFAULT = 22050, MAX_SESS = 3;
+  let chain = Promise.resolve();    // ساخت صدا پشت‌سرهم (نشست ort هم‌زمان امن نیست)
+  const serial = (fn) => { const p = chain.then(fn, fn); chain = p.catch(() => {}); return p; };
 
   function loadScript(src) {
     return new Promise((res, rej) => {
@@ -33,11 +35,9 @@
   async function getJSON(u) { const r = await fetch(u); if (bad(r)) throw new Error('فایل پیدا نشد: ' + u); return r.json(); }
   async function getBuf(u) { const r = await fetch(u); if (bad(r)) throw new Error('فایل پیدا نشد: ' + u); return new Uint8Array(await r.arrayBuffer()); }
 
-  // بارگذاری یک‌باره: ort + phonemizer + تنظیمات + مدل
-  function init(onStatus) {
-    if (S.ready) return Promise.resolve(true);
+  // بخش مشترک: ort + آوانگار (یک بار)
+  function initShared(say) {
     if (S.loading) return S.loading;
-    const say = (m) => { if (onStatus) onStatus(m); };
     S.loading = (async () => {
       if (typeof WebAssembly === 'undefined') throw new Error('این مرورگر WebAssembly ندارد');
       say('موتور اجرا (ort)…');
@@ -45,18 +45,34 @@
       window.ort.env.wasm.wasmPaths = PATHS.ortDir; window.ort.env.wasm.numThreads = 1; window.ort.env.wasm.proxy = false;
       say('آوانگار (espeak-ng)…');
       if (typeof window.createPiperPhonemize !== 'function') await loadScript(PATHS.phJs);
-      say('تنظیمات صدا…');
-      S.cfg = await getJSON(vConf());
-      say('مدل صدا (حدود ۶۱ مگابایت)…');
-      S.sess = await window.ort.InferenceSession.create(await getBuf(vModel()), { executionProviders: ['wasm'] });
-      S.ready = true; S.err = ''; say('آماده');
       return true;
-    })().catch((e) => { S.loading = null; S.err = String(e && e.message || e); throw e; });
+    })().catch((e) => { S.loading = null; throw e; });
     return S.loading;
   }
+  // بارگذاری یک صدا (مدل ~۶۱ مگابایت)
+  function loadVoice(id, onStatus) {
+    let v = V.get(id);
+    if (v && v.sess) return Promise.resolve(v);
+    if (v && v.loading) return v.loading;
+    v = v || {}; V.set(id, v);
+    const say = (m) => { if (onStatus) onStatus(m); };
+    v.loading = (async () => {
+      await initShared(say);
+      say('تنظیمات صدا…'); v.cfg = await getJSON(vConf(id));
+      say('مدل صدا (حدود ۶۱ مگابایت)…');
+      v.sess = await window.ort.InferenceSession.create(await getBuf(vModel(id)), { executionProviders: ['wasm'] });
+      v.loading = null; S.err = ''; say('آماده');
+      // حافظه: بیش از ۳ صدای هم‌زمان نگه نمی‌داریم
+      const live = [...V.entries()].filter(([k, x]) => x.sess && k !== id);
+      while (live.length >= MAX_SESS) { const [k, x] = live.shift(); try { x.sess.release(); } catch (e) { /* مهم نیست */ } x.sess = null; }
+      return v;
+    })().catch((e) => { V.delete(id); S.err = String(e && e.message || e); throw e; });
+    return v.loading;
+  }
+  const init = (onStatus) => loadVoice(voice, onStatus).then(() => true);
 
   // متن ← شناسهٔ آواها (همان روش کتابخانهٔ مرجع)
-  function phonemeIds(text) {
+  function phonemeIds(text, cfg) {
     return new Promise((resolve, reject) => {
       let done = false;
       const fin = (f, v) => { if (!done) { done = true; f(v); } };
@@ -65,7 +81,7 @@
         printErr: () => {},
         locateFile: (u) => (u.endsWith('.wasm') ? PATHS.phDir + 'piper_phonemize.wasm' : u.endsWith('.data') ? PATHS.phDir + 'piper_phonemize.data' : u),
       }).then((m) => {
-        try { m.callMain(['-l', S.cfg.espeak.voice, '--input', JSON.stringify([{ text }]), '--espeak_data', '/espeak-ng-data']); } catch (e) { /* خروج عادی emscripten */ }
+        try { m.callMain(['-l', cfg.espeak.voice, '--input', JSON.stringify([{ text }]), '--espeak_data', '/espeak-ng-data']); } catch (e) { /* خروج عادی emscripten */ }
         setTimeout(() => fin(reject, new Error('آوانگاری نتیجه نداد')), 4000);
       }).catch((e) => fin(reject, e));
     });
@@ -84,35 +100,50 @@
     return out;
   }
 
-  async function synthOne(text, lengthScale) {
-    const ids = await phonemeIds(text), T = window.ort.Tensor, inf = S.cfg.inference || {};
+  async function synthOne(v, text, lengthScale) {
+    const ids = await phonemeIds(text, v.cfg), T = window.ort.Tensor, inf = v.cfg.inference || {};
     const feeds = {
       input: new T('int64', BigInt64Array.from(ids.map((x) => BigInt(x))), [1, ids.length]),
       input_lengths: new T('int64', BigInt64Array.from([BigInt(ids.length)]), [1]),
       scales: new T('float32', Float32Array.from([inf.noise_scale == null ? 0.667 : inf.noise_scale, lengthScale, inf.noise_w == null ? 0.8 : inf.noise_w]), [3]),
     };
-    if ((S.cfg.num_speakers || 1) > 1) feeds.sid = new T('int64', BigInt64Array.from([0n]), [1]);
-    const out = await S.sess.run(feeds);
+    if ((v.cfg.num_speakers || 1) > 1) feeds.sid = new T('int64', BigInt64Array.from([0n]), [1]);
+    const out = await v.sess.run(feeds);
     return Float32Array.from((out.output || out[Object.keys(out)[0]]).data);
   }
 
   const pitchK = (f0) => BZ.clamp(Math.pow((f0 || 160) / 160, 0.4), 0.75, 1.35);
-  const keyOf = (text, sp, k) => voice + '|' + text + '|' + sp + '|' + k.toFixed(2);
+  const keyOf = (vid, text, sp, k, fit) => vid + '|' + text + '|' + sp + '|' + k.toFixed(2) + (fit ? '|f' : '');
+  const SP = BZ.speech, origBuffer = SP.buffer, origPlan = SP.plan;
 
-  // تولید صدا: {pcm: Float32Array, sr, dur}
+  // تولید صدا: {pcm, sr, dur}. opt: {speed, f0, nv (شناسهٔ صدا), fit (true: مدت را با موتور فعلی هم‌اندازه کن)}
+  // fit لازم است چون زمان‌بندی نمایش، لب‌ها و برش صدا از طرح موتور داخلی می‌آید؛ صدای عصبی باید همان‌اندازه شود.
   async function synth(text, opt) {
     opt = opt || {};
-    await init();
-    const sp = BZ.clamp(opt.speed || 1, 0.5, 2), k = pitchK(opt.f0), key = keyOf(text, sp, k);
+    const vid = opt.nv || voice, sp = BZ.clamp(opt.speed || 1, 0.5, 2), k = pitchK(opt.f0), key = keyOf(vid, text, sp, k, opt.fit);
     if (cache.has(key)) return cache.get(key);
-    const base = ((S.cfg.inference || {}).length_scale || 1) / sp * k, parts = [], gap = new Float32Array(Math.floor(SR_DEFAULT * 0.18));
-    for (const s of splitSentences(text)) { parts.push(await synthOne(s, base)); parts.push(gap); }
-    if (!parts.length) throw new Error('متنی برای خواندن نیست');
-    let n = 0; parts.forEach((p) => { n += p.length; });
-    const all = new Float32Array(n); let o = 0; parts.forEach((p) => { all.set(p, o); o += p.length; });
-    const sr = (S.cfg.audio && S.cfg.audio.sample_rate) || SR_DEFAULT, pcm = resample(all, k), r = { pcm, sr, dur: pcm.length / sr };
-    if (cache.size > 40) cache.clear();
-    cache.set(key, r); durByText.set(voice + '|' + text + '|' + sp, r.dur);
+    const target = opt.fit ? origPlan.call(SP, text, opt.speed || 1).dur : 0;
+    const r = await serial(async () => {
+      if (cache.has(key)) return cache.get(key);
+      const v = await loadVoice(vid), sents = splitSentences(text);
+      if (!sents.length) throw new Error('متنی برای خواندن نیست');
+      const sr = (v.cfg.audio && v.cfg.audio.sample_rate) || SR_DEFAULT, gap = new Float32Array(Math.floor(SR_DEFAULT * 0.18));
+      const run = async (ls) => {
+        const parts = []; for (const s of sents) { parts.push(await synthOne(v, s, ls)); parts.push(gap); }
+        let n = 0; parts.forEach((p) => { n += p.length; });
+        const all = new Float32Array(n); let o = 0; parts.forEach((p) => { all.set(p, o); o += p.length; });
+        return resample(all, k);
+      };
+      let ls = ((v.cfg.inference || {}).length_scale || 1) / sp * k, pcm = await run(ls);
+      if (target > 0.15) {   // مدت را به هدف نزدیک کن (طول مدل تقریباً خطی است)
+        const d0 = pcm.length / sr;
+        if (Math.abs(d0 / target - 1) > 0.06) { ls = BZ.clamp(ls * target / d0, 0.35, 2.5); pcm = await run(ls); }
+      }
+      const res = { pcm, sr, dur: pcm.length / sr };
+      if (cache.size > 120) cache.clear();
+      cache.set(key, res);
+      return res;
+    });
     return r;
   }
 
@@ -124,39 +155,56 @@
     return src;
   }
 
-  // ----- اتصال اختیاری به شخصیت‌ها (پیش‌فرض خاموش) -----
+  // ----- اتصال به شخصیت‌ها -----
+  // هر شخصیت می‌تواند voice.neural داشته باشد (شناسهٔ یکی از صداها). «استفاده در شخصیت‌ها» برای شخصیت‌های بدون انتخاب، صدای تب «صدا» را می‌گذارد.
   const flag = { on: !!BZ.store.get('ntts_chars', false) };
-  const SP = BZ.speech, origBuffer = SP.buffer, origPlan = SP.plan;
+  const vidFor = (say) => (say && say.nv) || (flag.on ? voice : '');
+  const wantQ = [];
+  let wantBusy = false;
+  function want(say) {   // پیش‌ساخت پس‌زمینه: جملهٔ بعدی که هنوز آماده نیست
+    const vid = vidFor(say); if (!vid || !say.t) return;
+    const sp = BZ.clamp(say.sp || 1, 0.5, 2), key = keyOf(vid, say.t, sp, pitchK(say.f0), true);
+    if (cache.has(key) || failed.has(key) || wantQ.some((q) => q.key === key)) return;
+    wantQ.push({ key, say, vid }); drain();
+  }
+  function drain() {
+    if (wantBusy || !wantQ.length) return;
+    wantBusy = true; const q = wantQ.shift();
+    synth(q.say.t, { speed: q.say.sp, f0: q.say.f0, nv: q.vid, fit: true }).catch((e) => { failed.add(q.key); console.warn('ntts', e); }).then(() => { wantBusy = false; drain(); });
+  }
   SP.buffer = function (ctx, say) {
-    if (flag.on && say && say.t) {
-      const hit = cache.get(keyOf(say.t, BZ.clamp(say.sp || 1, 0.5, 2), pitchK(say.f0)));
+    const vid = vidFor(say);
+    if (vid && say.t) {
+      const hit = cache.get(keyOf(vid, say.t, BZ.clamp(say.sp || 1, 0.5, 2), pitchK(say.f0), true));
       if (hit) { const ab = ctx.createBuffer(1, hit.pcm.length, hit.sr); if (ab.copyToChannel) ab.copyToChannel(hit.pcm, 0); else ab.getChannelData(0).set(hit.pcm); return ab; }
+      want(say);   // این بار صدای داخلی؛ دفعهٔ بعد صدای عصبی
     }
     return origBuffer.apply(SP, arguments);
   };
-  SP.plan = function (text, speed) {
-    const p = origPlan.apply(SP, arguments), sp = BZ.clamp(speed || 1, 0.5, 2), d = flag.on ? durByText.get(voice + '|' + text + '|' + sp) : 0;
-    if (!d || !p.syl || !p.syl.length) return p;
-    const ck = voice + '|' + text + '|' + sp + '|' + d.toFixed(3);
-    let q = planCache.get(ck);
-    if (!q) {
-      const f = d / p.dur;   // کشیدن زمان‌بندی لب به مدت صدای عصبی
-      q = Object.assign({}, p, { dur: d, syl: p.syl.map((s) => Object.assign({}, s, { t: s.t * f, d: s.d * f })) });
-      if (planCache.size > 200) planCache.clear(); planCache.set(ck, q);
-    }
-    return q;
-  };
-
-  BZ.ntts = {
+  // خطوط عصبی یک نمایش (نمایش‌نامه): [{text, sp, f0, nv}]
+  function showLines(show) {
+    const out = [];
+    if (!show || show.kind === 'life' || !show.lines || !BZ.lib) return out;
+    show.lines.forEach((ln) => {
+      const m = (show.cast || [])[ln.who], ch = m ? BZ.lib.char(m.cid) : null, vc = (ch && ch.voice) || {};
+      const nv = vc.neural || (flag.on ? voice : '');
+      if (nv && ln.text) out.push({ t: ln.text, sp: vc.speed || 1, f0: vc.pitch || 180, nv });
+    });
+    return out;
+  }
+  const api = {
     voices: VOICES, get voice() { return voice; },
-    // تغییر صدا: مدل قبلی آزاد و در بارگذاری بعدی مدل تازه خوانده می‌شود
-    setVoice(id) { if (id === voice || !VOICES.some((v) => v[0] === id)) return; voice = id; BZ.store.set('ntts_voice', id); try { if (S.sess && S.sess.release) S.sess.release(); } catch (e) { /* مهم نیست */ } S.sess = null; S.cfg = null; S.ready = false; S.loading = null; S.err = ''; },
-    init, synth, play, splitSentences, resample, pitchK, _S: S,
-    get ready() { return S.ready; }, get error() { return S.err; },
+    setVoice(id) { if (id === voice || !VOICES.some((x) => x[0] === id)) return; voice = id; BZ.store.set('ntts_voice', id); },
+    init, synth, play, splitSentences, resample, pitchK, want, showLines,
+    get ready() { const v = V.get(voice); return !!(v && v.sess); }, get error() { return S.err; },
     get forChars() { return flag.on; }, setForChars(v) { flag.on = !!v; BZ.store.set('ntts_chars', flag.on); },
-    // آماده‌سازی چند جمله (برای شخصیت‌ها): lines = [{text, speed, f0}]
+    voiceOptions() { return [{ v: '', t: 'صدای داخلی (فرمانتی)' }].concat(VOICES.map((x) => ({ v: x[0], t: 'عصبی: ' + x[1] }))); },
+    needsPrep(show) { return showLines(show).some((l) => !cache.has(keyOf(l.nv, l.t, BZ.clamp(l.sp, 0.5, 2), pitchK(l.f0), true))); },
+    // ساخت همهٔ خطوط یک نمایش پیش از پخش؛ onProgress(i, n)
+    async prepareShow(show, onProgress) { const L = showLines(show); let i = 0; for (const l of L) { await synth(l.t, { speed: l.sp, f0: l.f0, nv: l.nv, fit: true }); if (onProgress) onProgress(++i, L.length); } },
     async prepare(lines, onProgress) { let i = 0; for (const l of lines) { await synth(l.text, l); if (onProgress) onProgress(++i, lines.length); } },
   };
+  BZ.ntts = api;
 
   // ----- تب «صدا» -----
   BZ.nttsPanel = function () {
@@ -169,7 +217,7 @@
     const fail = (e) => { setSt('خطا: ' + (e && e.message || e)); BZ.toast('خطا در صدای عصبی'); console.error(e); };
     const load = BZ.btn('بارگذاری موتور صدا', () => { load.disabled = true; init(setSt).then(() => { load.textContent = 'موتور آماده است'; }).catch((e) => { load.disabled = false; fail(e); }); }, 'go');
     const sel = BZ.select(VOICES.map((v) => ({ v: v[0], t: v[1] })), voice, (id) => {
-      BZ.ntts.setVoice(id); load.disabled = false; load.textContent = 'بارگذاری موتور صدا'; setSt('صدا عوض شد؛ دوباره «بارگذاری موتور صدا» را بزنید. اگر فایل آن صدا در برنامه نیست، با get-voices.sh دانلودش کنید.');
+      BZ.ntts.setVoice(id); load.disabled = false; load.textContent = 'بارگذاری موتور صدا'; setSt('صدا عوض شد؛ «بارگذاری موتور صدا» را بزنید. اگر فایل این صدا در برنامه نیست، با get-voices.sh دانلودش کنید.');
     });
     const speakN = BZ.btn('🗣 پخش با صدای عصبی', async () => {
       try { setSt('در حال ساخت صدا…'); const t0 = performance.now(), r = await synth(ta.value, { speed, f0 }); play(r); setSt('ساخته شد: ' + r.dur.toFixed(1) + ' ثانیه صدا در ' + ((performance.now() - t0) / 1000).toFixed(1) + ' ثانیه'); } catch (e) { fail(e); }
@@ -183,6 +231,6 @@
       BZ.note('هر متنی بنویسید و بشنوید. صدای فعلی برنامه حذف یا عوض نشده و همچنان پیش‌فرض است.'),
       h('label', { class: 'note' }, 'صدا: ', sel), ta, sl1, sl2, st,
       h('div', { class: 'r-ctrl' }, load, speakN, speakK),
-      h('label', { class: 'note' }, chk, ' استفاده در شخصیت‌ها (آزمایشی؛ فقط برای جمله‌هایی که از قبل ساخته شده‌اند)'));
+      h('label', { class: 'note' }, chk, ' استفاده برای همهٔ شخصیت‌هایی که صدای خودشان را انتخاب نکرده‌اند (صدای هر شخصیت را در استودیو ← کارگاه ← «صدای عصبی» تعیین کنید)'));
   };
 })();

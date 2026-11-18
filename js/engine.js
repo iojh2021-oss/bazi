@@ -250,7 +250,7 @@
       const ch = this.char(cid), v = ch.voice || {};
       const gm = { happy: 1, sad: 0.8, angry: 1.15, surprised: 1.1, thinking: 0.9, neutral: 1 }[emo] || 1;
       const vt = v.tract || (ch.type === 'plant' ? 0.93 : 1);
-      evs.push({ b: (lo - w0) / 0.5, d: (hi - lo) / 0.5, off: lo - at, len: hi - lo, g: 0.8 * gm, say: { t: text, sp, f0: v.pitch || 180, vt, em: emo || 'neutral', rob: ch.body === 'box' } });
+      evs.push({ b: (lo - w0) / 0.5, d: (hi - lo) / 0.5, off: lo - at, len: hi - lo, g: 0.8 * gm, say: { t: text, sp, f0: v.pitch || 180, vt, em: emo || 'neutral', rob: ch.body === 'box', nv: v.neural || '' } });
     }
     bar(s, idx) {
       const w0 = idx * 2, evs = [];

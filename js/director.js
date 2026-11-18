@@ -19,10 +19,18 @@
     const g = cv.getContext('2d'), me = { pl: null, show: null, playing: false, t0: 0, stopAt: 0 };
     me.start = (show, t0, auto) => {
       me.stop(); if (!BZ.audio.init()) { BZ.toast('صدا در این مرورگر فعال نیست'); }
+      if (BZ.ntts && BZ.ntts.needsPrep(show)) {   // صدای عصبی: پیش از پخش همهٔ جمله‌ها ساخته شوند
+        const tok = (me.tok = {}); BZ.toast('در حال ساخت صدای عصبی… (بار نخست چند ثانیه)');
+        BZ.ntts.prepareShow(show).catch((e) => { BZ.toast('صدای عصبی: ' + (e && e.message || e) + ' — با صدای داخلی پخش می‌شود'); }).then(() => { if (me.tok === tok) { me.tok = null; me.go(show, t0, auto); } });
+        return;
+      }
+      me.go(show, t0, auto);
+    };
+    me.go = (show, t0, auto) => {
       me.show = show; me.t0 = t0 || 0; me.playing = true; me.stopAt = auto ? performance.now() + auto * 1000 : 0;
       if (BZ.audio.ctx) me.pl = BZ.makePlayer(BZ.audio.ctx, BZ.serverProg(show), BZ.audio.master, { t0: me.t0, quality: () => 1, tag: 'preview' });
     };
-    me.stop = () => { if (me.pl) { me.pl.stop(); me.pl = null; } me.playing = false; };
+    me.stop = () => { me.tok = null; if (me.pl) { me.pl.stop(); me.pl = null; } me.playing = false; };
     me.paint = (now) => {
       if (me.stopAt && now > me.stopAt) me.stop();
       if (!me.playing || !me.pl) { g.fillStyle = '#080d11'; g.fillRect(0, 0, cv.width, cv.height); g.fillStyle = '#6f8ea0'; g.font = '14px ' + BZ.FONT; g.textAlign = 'center'; g.fillText('برای پیش‌نمایش ▶ را بزنید', cv.width / 2, cv.height / 2); return; }
@@ -125,6 +133,8 @@
         c._draft ? h('p', { class: 'note strong' }, 'این شخصیت داخلی است؛ با اولین تغییر، نسخهٔ شخصی شما ساخته و ذخیره می‌شود.') : null,
         h('div', { class: 'fgrid' }, fld('نام', inp('name')), c.type === 'plant' ? fld('گونه', sel(SPEC_OPTS, 'species')) : fld('بدنه', sel(BODY_OPTS, 'body')), c.type === 'puppet' ? fld('گوش/آنتن', sel(EARS_OPTS, 'ears')) : null, fld('رنگ اصلی', clr('color')), fld(c.type === 'plant' ? 'رنگ گلدان' : 'رنگ فرعی', clr('accent'))),
         h('div', { class: 'sl-grid' }, sl('اندازهٔ چشم', 'eyes', 0, 1, 0.05, (v) => v.toFixed(2)), sl('فاصلهٔ چشم‌ها', 'eyeGap', 0, 1, 0.05, (v) => v.toFixed(2)), sl('اندازه', 'size', 0.6, 1.5, 0.05, (v) => v.toFixed(2)), sl('زیر و بمی صدا', 'pitch', 70, 400, 5, (v) => v + ' Hz', true), sl('سرعت گفتار', 'speed', 0.6, 1.6, 0.05, (v) => v.toFixed(2) + '×', true), sl('طول مجرای صوتی (فرمانت‌ها)', 'tract', 0.8, 1.3, 0.02, (v) => v.toFixed(2) + '×', true)),
+        BZ.ntts ? h('div', { class: 'fgrid' }, fld('صدای عصبی (Piper)', (() => { const s = BZ.select(BZ.ntts.voiceOptions(), c.voice.neural || '', (v) => { c.voice.neural = v; save(); }); return s; })())) : null,
+        BZ.ntts ? h('p', { class: 'note' }, 'با انتخاب صدای عصبی، این شخصیت در نمایش‌ها، «زندگی» و پخش تلویزیون/رادیو با همان صدا حرف می‌زند. اگر خالی بماند صدای داخلی پیشین کار می‌کند. فایل صدا باید در برنامه باشد (get-voices.sh). سرعت و زیروبمی بالا روی صدای عصبی هم اثر دارند.') : null,
         h('p', { class: 'note' }, c.type === 'plant' ? 'گیاه: ساقه با ترکیب سه نوسان باد تکان می‌خورد؛ در «زندگی» رشد می‌کند و بدون آب پژمرده می‌شود.' : 'عروسک: بازوی دو‌مفصلی (FK)، تنفس، پلک‌زدن، ابرو و دهان؛ شکل دهان از ویزم واکه‌ها می‌آید.'),
         h('div', { class: 'r-ctrl' }, BZ.btn('کپی', () => create(c.type, c)), ro ? null : BZ.btn('حذف', () => { if (!confirm('این شخصیت حذف شود؟')) return; const id = c.id; BZ.lib.del('chars', id).then(() => { cur = BZ.lib.chars.find(notTmp); renderList(); renderEd(); }); })));
     }
