@@ -13,7 +13,11 @@
     phJs: U('models/phonemize/piper_phonemize.js'), phDir: U('models/phonemize/'),
   };
   // صداهای فارسی Piper (هر کدام دو فایل در models/piper/ دارند؛ با get-voices.sh دانلود می‌شوند)
-  const VOICES = [['amir', 'امیر'], ['reza_ibrahim', 'رضا'], ['ganji', 'گنجی'], ['ganji_adabi', 'گنجی (ادبی)'], ['gyro', 'گایرو'], ['magnoliasis', 'مگنولیا']];
+  // نسخه‌های «~f» (زنانه) و «~k» (کودک) همان مدل مردانه‌اند که گام و فرمانت‌ها بالا برده می‌شوند (در Piper فارسی صدای زن تأییدشده‌ای نیست)
+  const VOICES = [['amir', 'امیر (مردانه)'], ['amir~f', 'زنانه (ساخته‌شده از امیر)'], ['amir~k', 'کودک (ساخته‌شده از امیر)'], ['reza_ibrahim', 'رضا (مردانه)'], ['reza_ibrahim~f', 'زنانه (ساخته‌شده از رضا)'], ['ganji', 'گنجی (مردانه)'], ['ganji~f', 'زنانه (ساخته‌شده از گنجی)'], ['ganji_adabi', 'گنجی ادبی (مردانه)'], ['gyro', 'گایرو (مردانه)'], ['magnoliasis', 'مگنولیا']];
+  const baseOf = (id) => String(id).split('~')[0];
+  const VFACT = { f: 1.17, k: 1.38 };   // ضریب بالابردن گام و فرمانت (بازنمونه‌گیری)
+  const vfact = (id) => VFACT[String(id).split('~')[1]] || 1;
   let voice = BZ.store.get('ntts_voice', 'amir');
   if (!VOICES.some((v) => v[0] === voice)) voice = 'amir';
   const vModel = (id) => U('models/piper/fa_IR-' + id + '-medium.onnx');
@@ -75,6 +79,7 @@
 
   // بارگذاری یک صدا (مدل ~۶۱ مگابایت)
   function loadVoice(id, onStatus) {
+    id = baseOf(id);
     let v = V.get(id);
     if (v && v.sess) return Promise.resolve(v);
     if (v && v.loading) return v.loading;
@@ -100,7 +105,7 @@
     })().catch((e) => { V.delete(id); S.err = String(e && e.message || e); throw e; });
     return v.loading;
   }
-  const init = (onStatus) => loadVoice(voice, onStatus).then(() => true);
+  const init = (onStatus) => loadVoice(baseOf(voice), onStatus).then(() => true);
 
   // متن ← شناسهٔ آواها (همان روش کتابخانهٔ مرجع)
   function phonemeIds(text, cfg) {
@@ -145,7 +150,7 @@
     return Float32Array.from((out.output || out[Object.keys(out)[0]]).data);
   }
 
-  const pitchK = (f0) => BZ.clamp(Math.pow((f0 || 160) / 160, 0.4), 0.75, 1.35);
+  const pitchK = (f0, vid) => BZ.clamp(Math.pow((f0 || 160) / 160, 0.4) * vfact(vid || ''), 0.7, 1.75);
   const keyOf = (vid, text, sp, k, fit) => vid + '|' + text + '|' + sp + '|' + k.toFixed(2) + (fit ? '|f' : '');
   const SP = BZ.speech, origBuffer = SP.buffer, origPlan = SP.plan;
 
@@ -153,13 +158,13 @@
   // fit لازم است چون زمان‌بندی نمایش، لب‌ها و برش صدا از طرح موتور داخلی می‌آید؛ صدای عصبی باید همان‌اندازه شود.
   async function synth(text, opt) {
     opt = opt || {};
-    const vid = opt.nv || voice, sp = BZ.clamp(opt.speed || 1, 0.5, 2), k = pitchK(opt.f0), key = keyOf(vid, text, sp, k, opt.fit);
+    const vid = opt.nv || voice, sp = BZ.clamp(opt.speed || 1, 0.5, 2), k = pitchK(opt.f0, vid), key = keyOf(vid, text, sp, k, opt.fit);
     if (cache.has(key)) return cache.get(key);
     const tS = performance.now();
     const target = opt.fit ? origPlan.call(SP, text, opt.speed || 1).dur : 0;
     const r = await serial(async () => {
       if (cache.has(key)) return cache.get(key);
-      const v = await loadVoice(vid), sents = splitSentences(text);
+      const v = await loadVoice(baseOf(vid)), sents = splitSentences(text);
       if (!sents.length) throw new Error('متنی برای خواندن نیست');
       const sr = (v.cfg.audio && v.cfg.audio.sample_rate) || SR_DEFAULT, gap = new Float32Array(Math.floor(SR_DEFAULT * 0.18));
       const run = async (ls) => {
@@ -203,7 +208,7 @@
   function want(say) {   // پیش‌ساخت پس‌زمینه: جملهٔ بعدی که هنوز آماده نیست
     const vid = vidFor(say); if (!vid || !say.t) return;
     neuralSeenAt = performance.now();
-    const sp = BZ.clamp(say.sp || 1, 0.5, 2), key = keyOf(vid, say.t, sp, pitchK(say.f0), true);
+    const sp = BZ.clamp(say.sp || 1, 0.5, 2), key = keyOf(vid, say.t, sp, pitchK(say.f0, vid), true);
     if (cache.has(key) || failed.has(key) || wantQ.some((q) => q.key === key)) return;
     wantQ.push({ key, say, vid }); drain();
   }
@@ -215,7 +220,7 @@
   SP.buffer = function (ctx, say) {
     const vid = vidFor(say);
     if (vid && say.t) {
-      const hit = cache.get(keyOf(vid, say.t, BZ.clamp(say.sp || 1, 0.5, 2), pitchK(say.f0), true));
+      const hit = cache.get(keyOf(vid, say.t, BZ.clamp(say.sp || 1, 0.5, 2), pitchK(say.f0, vid), true));
       if (hit) { const ab = ctx.createBuffer(1, hit.pcm.length, hit.sr); if (ab.copyToChannel) ab.copyToChannel(hit.pcm, 0); else ab.getChannelData(0).set(hit.pcm); return ab; }
       want(say);   // این بار صدای داخلی؛ دفعهٔ بعد صدای عصبی
     }
@@ -226,7 +231,7 @@
     const out = [];
     if (!show || show.kind === 'life' || !show.lines || !BZ.lib) return out;
     show.lines.forEach((ln) => {
-      const m = (show.cast || [])[ln.who], ch = m ? BZ.lib.char(m.cid) : null, vc = (ch && ch.voice) || {};
+      const m = (show.cast || [])[ln.who], ch = m ? BZ.lib.char(m.cid) : null, vc = Object.assign({}, (ch && ch.voice) || {}, (m && m.voice) || {});   // صدای ویژهٔ همین نمایش بر صدای شخصیت غالب است
       const nv = vc.neural || (flag.on ? voice : '');
       if (nv && ln.text) out.push({ t: ln.text, sp: vc.speed || 1, f0: vc.pitch || 180, nv });
     });
@@ -241,10 +246,23 @@
     init, synth, play, splitSentences, resample, pitchK, want, showLines,
     get ready() { const v = V.get(voice); return !!(v && v.sess); }, get error() { return S.err; },
     get forChars() { return flag.on; }, setForChars(v) { flag.on = !!v; BZ.store.set('ntts_chars', flag.on); },
-    voiceOptions() { return [{ v: '', t: 'صدای داخلی (فرمانتی)' }].concat(VOICES.map((x) => ({ v: x[0], t: 'عصبی: ' + x[1] }))); },
-    needsPrep(show) { return showLines(show).some((l) => !cache.has(keyOf(l.nv, l.t, BZ.clamp(l.sp, 0.5, 2), pitchK(l.f0), true))); },
+    baseOf, voiceOptions() { return [{ v: '', t: 'صدای داخلی (فرمانتی)' }].concat(VOICES.map((x) => ({ v: x[0], t: 'عصبی: ' + x[1] }))); },
+    needsPrep(show) { return showLines(show).some((l) => !cache.has(keyOf(l.nv, l.t, BZ.clamp(l.sp, 0.5, 2), pitchK(l.f0, l.nv), true))); },
     // ساخت همهٔ خطوط یک نمایش پیش از پخش؛ onProgress(i, n)
-    async prepareShow(show, onProgress) { const L = showLines(show); let i = 0; for (const l of L) { await synth(l.t, { speed: l.sp, f0: l.f0, nv: l.nv, fit: true }); if (onProgress) onProgress(++i, L.length); } },
+    // onProgress(کسر ۰..۱, برچسب). مرحله‌ها: بارگذاری مدل‌ها (۰..۲۵٪) ← ساخت جمله‌ها (۲۵..۱۰۰٪، وزن‌دار بر اساس طول متن)
+    async prepareShow(show, onProgress) {
+      const L = showLines(show).filter((l) => !cache.has(keyOf(l.nv, l.t, BZ.clamp(l.sp, 0.5, 2), pitchK(l.f0, l.nv), true)));
+      const P = (f, t) => { if (onProgress) onProgress(Math.min(1, Math.max(0, f)), t); };
+      if (!L.length) { P(1, 'آماده'); return; }
+      const bases = [...new Set(L.map((l) => baseOf(l.nv)))].filter((b) => { const v = V.get(b); return !(v && v.sess); });
+      for (let i = 0; i < bases.length; i++) { P(0.25 * i / bases.length, 'بارگذاری مدل صدا ' + (i + 1) + ' از ' + bases.length + ' (حدود ۱۵ ثانیه)'); await loadVoice(bases[i]); }
+      const tot = L.reduce((a, l) => a + l.t.length, 0) || 1; let done = 0;
+      for (let i = 0; i < L.length; i++) {
+        const l = L[i]; P(0.25 + 0.75 * done / tot, 'ساخت صدا: جملهٔ ' + (i + 1) + ' از ' + L.length);
+        await synth(l.t, { speed: l.sp, f0: l.f0, nv: l.nv, fit: true }); done += l.t.length;
+      }
+      P(1, 'آماده');
+    },
     async prepare(lines, onProgress) { let i = 0; for (const l of lines) { await synth(l.text, l); if (onProgress) onProgress(++i, lines.length); } },
   };
   BZ.ntts = api;

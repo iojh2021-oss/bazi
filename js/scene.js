@@ -47,10 +47,13 @@
   // ---------- جهان سه‌بعدی (پرسپکتیو واقعی: x/d و y/d) ----------
   // دوربین در ارتفاع ثابت و افق در h*0.40؛ عمق z از ۰ (نزدیک) تا ۱ (دور): d = 1 + z*5
   const PROPS = {
-    tree: 'درخت', pine: 'کاج', bush: 'بوته', flowerbed: 'باغچهٔ گل', rock: 'سنگ', house: 'خانه', fence: 'نرده', lamp: 'چراغ', table: 'میز', sofa: 'مبل', tv: 'تلویزیون', pillar: 'ستون', cloud: 'ابر', mountain: 'کوه', pond: 'برکه', box: 'جعبه',
+    tree: 'درخت', pine: 'کاج', bush: 'بوته', flowerbed: 'باغچهٔ گل', rock: 'سنگ', house: 'خانه', fence: 'نرده', lamp: 'چراغ', table: 'میز', sofa: 'مبل', tv: 'تلویزیون', pillar: 'ستون', cloud: 'ابر', mountain: 'کوه', pond: 'برکه', box: 'جعبه', ground: 'زمین (چمن/خاک)', pot: 'گلدان',
   };
   BZ.PROP_NAMES = PROPS;
+  BZ.PROP_ICON = { tree: '🌳', pine: '🌲', bush: '🌿', flowerbed: '🌷', rock: '🪨', house: '🏠', fence: '🚧', lamp: '💡', table: '🪑', sofa: '🛋', tv: '📺', pillar: '🏛', cloud: '☁️', mountain: '⛰', pond: '💧', box: '📦', ground: '🟩', pot: '🪴' };
+  BZ.PROP_COLOR = { tree: '#4da35a', pine: '#2f7d4a', bush: '#3f9a52', flowerbed: '#ff5d8f', rock: '#8a8f98', house: '#e8c9a0', fence: '#c9a46a', lamp: '#ffd36a', table: '#9a6a3a', sofa: '#b04a5a', tv: '#4a90d8', pillar: '#d8d2c4', cloud: '#ffffff', mountain: '#8a96aa', pond: '#4a90d8', box: '#e8903a', ground: '#6cc27a', pot: '#c9673a' };
   const Cm = () => BZ.color;
+  BZ.drawProp = (...a) => drawProp(...a);
   function drawProp(g, p, X, Y, S, t) {
     const c = p.color || '#4da35a', dk = Cm().shade(c, -0.35), lt = Cm().shade(c, 0.3), u = 40 * S;
     g.save(); g.translate(X, Y);
@@ -72,6 +75,8 @@
       case 'pillar': g.fillStyle = c; g.fillRect(-u * 0.25, -u * 2.2, u * 0.5, u * 2.2); g.fillStyle = lt; g.fillRect(-u * 0.38, -u * 2.3, u * 0.76, u * 0.12); g.fillRect(-u * 0.38, -u * 0.12, u * 0.76, u * 0.12); g.fillStyle = dk; g.fillRect(u * 0.1, -u * 2.2, u * 0.15, u * 2.2); break;
       case 'cloud': g.fillStyle = 'rgba(255,255,255,.92)'; [[-0.8, 0, 0.5], [-0.2, -0.3, 0.65], [0.5, -0.1, 0.55], [1, 0.05, 0.4]].forEach((q) => { g.beginPath(); g.arc(q[0] * u + ((t * 5) % 40) * 0.0, -u * 3 + q[1] * u, q[2] * u, 0, 7); g.fill(); }); break;
       case 'mountain': g.fillStyle = c; g.beginPath(); g.moveTo(-u * 3, 0); g.lineTo(0, -u * 3.2); g.lineTo(u * 3, 0); g.closePath(); g.fill(); g.fillStyle = dk; g.beginPath(); g.moveTo(0, -u * 3.2); g.lineTo(u * 3, 0); g.lineTo(u * 0.6, 0); g.closePath(); g.fill(); g.fillStyle = '#fff'; g.beginPath(); g.moveTo(-u * 0.6, -u * 2.35); g.lineTo(0, -u * 3.2); g.lineTo(u * 0.6, -u * 2.35); g.lineTo(u * 0.2, -u * 2.1); g.lineTo(-u * 0.1, -u * 2.4); g.closePath(); g.fill(); break;
+      case 'ground': { const gr = g.createRadialGradient(0, -u * 0.1, 2, 0, 0, u * 2.4); gr.addColorStop(0, lt); gr.addColorStop(1, c); g.fillStyle = gr; g.beginPath(); g.ellipse(0, -u * 0.05, u * 2.4, u * 0.6, 0, 0, 7); g.fill(); g.strokeStyle = dk; g.lineWidth = Math.max(1, u * 0.04); for (let i = 0; i < 14; i++) { const a = i * 2.4, x = Math.cos(a) * u * (0.4 + (i % 5) * 0.35), y = -u * 0.05 + Math.sin(a) * u * 0.38; g.beginPath(); g.moveTo(x, y); g.lineTo(x + sw, y - u * 0.18); g.stroke(); } break; }
+      case 'pot': g.fillStyle = dk; g.beginPath(); g.moveTo(-u * 0.5, -u * 0.55); g.lineTo(u * 0.5, -u * 0.55); g.lineTo(u * 0.36, 0); g.lineTo(-u * 0.36, 0); g.closePath(); g.fill(); g.fillStyle = c; g.fillRect(-u * 0.56, -u * 0.7, u * 1.12, u * 0.18); g.fillStyle = '#4a2f1a'; g.beginPath(); g.ellipse(0, -u * 0.66, u * 0.46, u * 0.1, 0, 0, 7); g.fill(); g.strokeStyle = '#3f9a52'; g.lineWidth = Math.max(1, u * 0.05); [-0.25, 0, 0.25].forEach((x, i) => { g.beginPath(); g.moveTo(x * u, -u * 0.66); g.quadraticCurveTo(x * u * 1.8 + sw, -u * (1.1 + i * 0.1), x * u * 2.2 + sw, -u * (1.2 + i * 0.12)); g.stroke(); }); break;
       case 'pond': { const gr = g.createRadialGradient(0, 0, 2, 0, 0, u * 1.6); gr.addColorStop(0, lt); gr.addColorStop(1, c); g.fillStyle = gr; g.beginPath(); g.ellipse(0, 0, u * 1.6, u * 0.45, 0, 0, 7); g.fill(); g.strokeStyle = 'rgba(255,255,255,.5)'; g.lineWidth = 1; const r = (t * 0.6) % 1; g.beginPath(); g.ellipse(0, 0, u * 1.4 * r, u * 0.4 * r, 0, 0, 7); g.stroke(); } break;
       default: g.fillStyle = c; g.fillRect(-u * 0.5, -u * 0.8, u, u * 0.8); g.fillStyle = lt; g.fillRect(-u * 0.5, -u * 0.8, u, u * 0.15); g.fillStyle = dk; g.fillRect(u * 0.35, -u * 0.8, u * 0.15, u * 0.8);
     }

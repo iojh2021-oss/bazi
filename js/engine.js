@@ -172,7 +172,8 @@
   class Engine {
     constructor(host) { this.host = host; this.lifes = new Map(); this.comp = new Map(); }
     char(cid) { return this.host.char(cid) || FALLBACK; }
-    voiceSig(s) { return (s.cast || []).map((m) => JSON.stringify(this.char(m.cid).voice)).join(); }
+    voiceOf(m) { return Object.assign({}, this.char(m.cid).voice || {}, (m && m.voice) || {}); }
+    voiceSig(s) { return (s.cast || []).map((m) => JSON.stringify(this.voiceOf(m))).join(); }
     life(s) {
       const key = JSON.stringify([s.id, s.seed, s.epoch, s.life]);
       let L = this.lifes.get(key);
@@ -187,8 +188,8 @@
       let t = 0.8; const lines = [];
       (s.lines || []).forEach((ln) => {
         const m = (s.cast || [])[ln.who]; if (!m || !ln.text || !String(ln.text).trim()) return;
-        const ch = this.char(m.cid), pl = BZ.speech.plan(ln.text, (ch.voice && ch.voice.speed) || 1);
-        lines.push({ who: ln.who, cid: m.cid, text: ln.text, emo: ln.emo || 'neutral', act: ln.act || '', start: t, end: t + pl.dur, syl: pl.syl, q: pl.q });
+        const ch = this.char(m.cid), vo = this.voiceOf(m), pl = BZ.speech.plan(ln.text, vo.speed || 1);
+        lines.push({ who: ln.who, cid: m.cid, vo, text: ln.text, emo: ln.emo || 'neutral', act: ln.act || '', start: t, end: t + pl.dur, syl: pl.syl, q: pl.q });
         t += pl.dur + 0.4;
       });
       const res = { key, lines, dur: Math.max(4, Math.ceil((t + 0.6) / 2) * 2) };
@@ -244,10 +245,10 @@
     }
     // ---- صدا: رویدادهای یک میزان (۲ ثانیه، ۱۲۰ bpm) ----
     // گفتار: یک رویداد برای هر جمله در هر میزان؛ موج را کلاینت از همین متن می‌سازد (TTS آفلاین)
-    utterEv(cid, text, sp, emo, at, dur, w0, evs) {
+    utterEv(cid, text, sp, emo, at, dur, w0, evs, vo) {
       const lo = Math.max(at, w0), hi = Math.min(at + dur, w0 + 2);
       if (hi <= lo) return;
-      const ch = this.char(cid), v = ch.voice || {};
+      const ch = this.char(cid), v = vo || ch.voice || {};
       const gm = { happy: 1, sad: 0.8, angry: 1.15, surprised: 1.1, thinking: 0.9, neutral: 1 }[emo] || 1;
       const vt = v.tract || (ch.type === 'plant' ? 0.93 : 1);
       evs.push({ b: (lo - w0) / 0.5, d: (hi - lo) / 0.5, off: lo - at, len: hi - lo, g: 0.8 * gm, say: { t: text, sp, f0: v.pitch || 180, vt, em: emo || 'neutral', rob: ch.body === 'box', nv: v.neural || '' } });
@@ -269,7 +270,7 @@
       } else {
         const C = this.compile(s), W0 = w0 % C.dur;
         C.lines.forEach((ln) => {
-          this.utterEv(ln.cid, ln.text, ((this.char(ln.cid).voice || {}).speed) || 1, ln.emo, ln.start, ln.end - ln.start, W0, evs);
+          this.utterEv(ln.cid, ln.text, (ln.vo && ln.vo.speed) || 1, ln.emo, ln.start, ln.end - ln.start, W0, evs, ln.vo);
         });
       }
       const m = s.music;

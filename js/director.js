@@ -17,11 +17,22 @@
   // ---------- پخش‌کنندهٔ پیش‌نمایش: صدا و تصویر هر دو از جریان سرور ----------
   function Player(cv) {
     const g = cv.getContext('2d'), me = { pl: null, show: null, playing: false, t0: 0, stopAt: 0 };
+    // نوار پیشرفت آماده‌سازی (درصد + زمان باقی‌مانده)
+    me.bar = h('div', { class: 'pbar', style: { display: 'none' } }, h('div', { class: 'pfill' }), h('span', { class: 'ptxt' }));
+    let pT0 = 0;
+    me.prog = (f, label) => {
+      me.bar.style.display = ''; me.bar.firstChild.style.width = Math.round(f * 100) + '%';
+      const el = (performance.now() - pT0) / 1000, eta = f > 0.3 && f < 1 ? ' — حدود ' + Math.ceil(el * (1 - f) / f) + ' ثانیه مانده' : '';
+      me.bar.lastChild.textContent = label + ' — ' + Math.round(f * 100) + '٪' + eta;
+    };
+    me.hideBar = () => { me.bar.style.display = 'none'; };
     me.start = (show, t0, auto) => {
       me.stop(); if (!BZ.audio.init()) { BZ.toast('صدا در این مرورگر فعال نیست'); }
       if (BZ.ntts && BZ.ntts.needsPrep(show)) {   // صدای عصبی: پیش از پخش همهٔ جمله‌ها ساخته شوند
-        const tok = (me.tok = {}); BZ.toast('در حال ساخت صدای عصبی… (بار نخست چند ثانیه)');
-        BZ.ntts.prepareShow(show).catch((e) => { BZ.toast('صدای عصبی: ' + (e && e.message || e) + ' — با صدای داخلی پخش می‌شود'); }).then(() => { if (me.tok === tok) { me.tok = null; me.go(show, t0, auto); } });
+        const tok = (me.tok = {}); pT0 = performance.now(); me.prog(0, 'آماده‌سازی صدای عصبی');
+        BZ.ntts.prepareShow(show, (f, l) => { if (me.tok === tok) me.prog(f, l); })
+          .catch((e) => { BZ.toast('صدای عصبی: ' + (e && e.message || e) + ' — با صدای داخلی پخش می‌شود'); })
+          .then(() => { if (me.tok === tok) { me.tok = null; me.prog(1, 'آماده؛ شروع پخش'); setTimeout(me.hideBar, 600); me.go(show, t0, auto); } });
         return;
       }
       me.go(show, t0, auto);
@@ -30,7 +41,7 @@
       me.show = show; me.t0 = t0 || 0; me.playing = true; me.stopAt = auto ? performance.now() + auto * 1000 : 0;
       if (BZ.audio.ctx) me.pl = BZ.makePlayer(BZ.audio.ctx, BZ.serverProg(show), BZ.audio.master, { t0: me.t0, quality: () => 1, tag: 'preview' });
     };
-    me.stop = () => { me.tok = null; if (me.pl) { me.pl.stop(); me.pl = null; } me.playing = false; };
+    me.stop = () => { me.tok = null; me.hideBar(); if (me.pl) { me.pl.stop(); me.pl = null; } me.playing = false; };
     me.paint = (now) => {
       if (me.stopAt && now > me.stopAt) me.stop();
       if (!me.playing || !me.pl) { g.fillStyle = '#080d11'; g.fillRect(0, 0, cv.width, cv.height); g.fillStyle = '#6f8ea0'; g.font = '14px ' + BZ.FONT; g.textAlign = 'center'; g.fillText('برای پیش‌نمایش ▶ را بزنید', cv.width / 2, cv.height / 2); return; }
@@ -69,7 +80,34 @@
     }, 33);
     BZ.toast('در حال ضبط… (این تب را باز نگه دارید)');
   }
-  const scriptLen = (s) => Math.ceil((s.lines || []).reduce((a, l) => { const m = (s.cast || [])[l.who], ch = m ? BZ.lib.char(m.cid) : null; return a + (l.text ? BZ.speech.plan(l.text, (ch && ch.voice && ch.voice.speed) || 1).dur + 0.4 : 0); }, 1.6));
+  const scriptLen = (s) => Math.ceil((s.lines || []).reduce((a, l) => { const m = (s.cast || [])[l.who], ch = m ? BZ.lib.char(m.cid) : null, sp = (m && m.voice && m.voice.speed) || (ch && ch.voice && ch.voice.speed) || 1; return a + (l.text ? BZ.speech.plan(l.text, sp).dur + 0.4 : 0); }, 1.6));
+
+  // ---------- نت‌پد: ویرایش متن بلند در پنجرهٔ کامل ----------
+  function openNotepad(o) {
+    const ta = h('textarea', { class: 'inp', rows: 10, style: { width: '100%', minHeight: '38vh', direction: 'rtl', fontSize: '16px', lineHeight: '1.9', resize: 'vertical' } });
+    ta.value = o.text || '';
+    const info = h('div', { class: 'note' });
+    let tm = 0;
+    const upd = () => { clearTimeout(tm); tm = setTimeout(() => { const t = ta.value; let d = 0; try { d = t.trim() ? BZ.speech.plan(t, o.sp || 1).dur : 0; } catch (e) { /* مهم نیست */ } info.textContent = t.length + ' نویسه — مدت تقریبی گفتار ' + d.toFixed(1) + ' ثانیه'; }, 200); };
+    ta.addEventListener('input', upd); upd();
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    const close = () => { clearTimeout(tm); ov.remove(); document.removeEventListener('keydown', onKey); };
+    document.addEventListener('keydown', onKey);
+    const ov = h('div', { class: 'modal', onclick: (e) => { if (e.target === ov) close(); } },
+      h('div', { class: 'mbox' }, h('h3', null, o.title || 'ویرایش متن'), ta, info,
+        h('div', { class: 'r-ctrl' }, BZ.btn('✔ ذخیره', () => { o.onSave(ta.value); close(); }, 'go'), BZ.btn('انصراف', close))));
+    document.body.append(ov); setTimeout(() => ta.focus(), 50);
+  }
+  // آزمون صدای یک عضو (جملهٔ کوتاه) با همان مسیر پخش
+  function testVoice(vo, text, onState) {
+    BZ.audio.init(); const c = BZ.audio.ctx; if (!c) { BZ.toast('صدا فعال نیست'); return; }
+    const sp = vo.speed || 1, f0 = vo.pitch || 180;
+    if (vo.neural && BZ.ntts && BZ.ntts.synth) {
+      onState && onState('در حال ساخت…');
+      Promise.resolve(BZ.ntts.synth(text, { speed: sp, f0, nv: vo.neural })).then((r) => { onState && onState(''); if (r && BZ.ntts.play) BZ.ntts.play(r, 0.9); }).catch((e) => { onState && onState(''); BZ.toast('صدای عصبی: ' + (e && e.message || e)); });
+    } else { const src = c.createBufferSource(); src.buffer = BZ.speech.buffer(c, { t: text, sp, f0, vt: vo.tract || 1, em: 'neutral' }); src.connect(BZ.audio.master); src.start(); }
+  }
+  const VOPTS = () => [{ v: '@', t: '↩ همان صدای شخصیت' }].concat(BZ.ntts && BZ.ntts.voiceOptions ? BZ.ntts.voiceOptions() : [{ v: '', t: 'صدای داخلی (فرمانتی)' }]);
 
   // ---------- پخش (انتشار) روی کانال/ایستگاه ----------
   function publishBox(getShow) {
@@ -114,10 +152,10 @@
     const save = () => { if (!cur) return; if (cur._draft) { delete cur._draft; BZ.lib.chars.push(cur); renderList(); renderEd(); } BZ.lib.putChar(cur); };
     function renderList() {
       list.innerHTML = '';
-      BZ.lib.chars.filter(notTmp).forEach((c) => list.append(h('button', { type: 'button', class: 'chip' + (cur && (c === cur || c.id === cur.id || cur._src === c.id) ? ' on' : ''), onclick: () => { cur = draftOf(c); pl.stop(); renderList(); renderEd(); } }, (c.type === 'plant' ? '🌱 ' : '🧸 ') + c.name)));
+      BZ.lib.chars.filter(notTmp).forEach((c) => list.append(h('button', { type: 'button', class: 'chip' + (cur && (c === cur || c.id === cur.id || cur._src === c.id) ? ' on' : ''), onclick: () => { cur = draftOf(c); pl.stop(); renderList(); renderEd(); } }, (c.type === 'prop' ? ((BZ.PROP_ICON || {})[c.ptype] || '🧩') + ' ' : c.type === 'plant' ? '🌱 ' : '🧸 ') + c.name)));
     }
     function create(type, from) {
-      const base = from ? JSON.parse(JSON.stringify(from)) : { type, name: type === 'plant' ? 'گیاه جدید' : 'عروسک جدید', body: 'sock', species: 'flower', color: type === 'plant' ? '#ff5d8f' : '#e8903a', accent: type === 'plant' ? '#c9673a' : '#8a4b1a', eyes: 0.5, eyeGap: 0.5, ears: 'cat', size: 1, voice: { pitch: type === 'plant' ? 140 : 200, speed: 1 } };
+      const base = from ? JSON.parse(JSON.stringify(from)) : type === 'prop' ? { type: 'prop', name: 'شیء جدید', ptype: 'tree', color: '#4da35a', size: 1, voice: { pitch: 180, speed: 1 } } : { type, name: type === 'plant' ? 'گیاه جدید' : 'عروسک جدید', body: 'sock', species: 'flower', color: type === 'plant' ? '#ff5d8f' : '#e8903a', accent: type === 'plant' ? '#c9673a' : '#8a4b1a', eyes: 0.5, eyeGap: 0.5, ears: 'cat', size: 1, voice: { pitch: type === 'plant' ? 140 : 200, speed: 1 } };
       base.id = 'u_' + BZ.uid('c'); base.builtin = false; base.seed = Math.floor(Math.random() * 50); if (from) base.name = from.name + ' (کپی)';
       BZ.lib.chars.push(base); cur = base;
       BZ.net.call('PUT', '/chars/' + base.id, base).then((r) => { ok(r); renderList(); renderEd(); });
@@ -129,6 +167,15 @@
       const sl = (label, key, min, max, step, fmt, path) => BZ.slider({ label, min, max, step, value: path ? (c.voice[key] == null ? 1 : c.voice[key]) : (c[key] == null ? 0.5 : c[key]), fmt, onInput: (v) => { if (ro) return; if (path) c.voice[key] = v; else c[key] = v; save(); } });
       const clr = (key) => { const i = h('input', { type: 'color', class: 'inp clr', value: c[key] || '#888888', disabled: ro }); i.addEventListener('input', () => { c[key] = i.value; save(); }); return i; };
       const sel = (opts, key) => { const s = BZ.select(opts, c[key] || opts[0].v, (v) => { c[key] = v; save(); }); s.disabled = ro; return s; };
+      if (c.type === 'prop') {
+        const types = Object.keys(BZ.PROP_NAMES).map((k) => ({ v: k, t: ((BZ.PROP_ICON || {})[k] || '') + ' ' + BZ.PROP_NAMES[k] }));
+        ed.append(c._draft ? h('p', { class: 'note strong' }, 'با اولین تغییر نسخهٔ شخصی ساخته می‌شود.') : null,
+          h('div', { class: 'fgrid' }, fld('نام', inp('name')), fld('نوع شیء', sel(types, 'ptype')), fld('رنگ', clr('color'))),
+          h('div', { class: 'sl-grid' }, BZ.slider({ label: 'اندازه', min: 0.4, max: 3, step: 0.1, value: c.size || 1, fmt: (v) => v.toFixed(1) + '×', onInput: (v) => { c.size = v; save(); } })),
+          h('p', { class: 'note' }, 'این شیء در «کارگردانی ← اشیای من» قابل انتخاب است و به صحنهٔ سه‌بعدی اضافه می‌شود.'),
+          h('div', { class: 'r-ctrl' }, BZ.btn('کپی', () => create('prop', c)), BZ.btn('حذف', () => { if (!confirm('این شیء حذف شود؟')) return; BZ.lib.del('chars', c.id).then(() => { cur = BZ.lib.chars.find(notTmp); renderList(); renderEd(); }); })));
+        return;
+      }
       ed.append(
         c._draft ? h('p', { class: 'note strong' }, 'این شخصیت داخلی است؛ با اولین تغییر، نسخهٔ شخصی شما ساخته و ذخیره می‌شود.') : null,
         h('div', { class: 'fgrid' }, fld('نام', inp('name')), c.type === 'plant' ? fld('گونه', sel(SPEC_OPTS, 'species')) : fld('بدنه', sel(BODY_OPTS, 'body')), c.type === 'puppet' ? fld('گوش/آنتن', sel(EARS_OPTS, 'ears')) : null, fld('رنگ اصلی', clr('color')), fld(c.type === 'plant' ? 'رنگ گلدان' : 'رنگ فرعی', clr('accent'))),
@@ -142,13 +189,13 @@
     const sayI = h('input', { type: 'text', class: 'inp', value: sayText, style: { flex: '1', minWidth: '180px' } }); sayI.addEventListener('input', () => { sayText = sayI.value; phon.textContent = 'آوانویسی: ' + BZ.speech.transcribe(sayText); });
     const phon = h('div', { class: 'note' }, 'آوانویسی: ' + BZ.speech.transcribe(sayText));
     const say = BZ.btn('🗣 بگو', () => {
-      if (!cur) return;
+      if (!cur || cur.type === 'prop') { BZ.toast('اشیا صدا ندارند'); return; }
       const tmp = { id: 'tmp_char', name: 'پیش‌نمایش', kind: 'script', seed: 'tmp', set: 'stage', camera: 'auto', title: '', music: { style: '', vol: 0 }, cast: [{ cid: cur.id, x: 0.5 }], lines: [{ who: 0, emo, act: '', text: sayText }] };
       (cur._draft ? BZ.net.call('PUT', '/chars/' + cur.id, Object.assign({}, cur, { _draft: undefined, builtin: false })) : Promise.resolve()).then(() => BZ.net.call('PUT', '/shows/tmp_char', tmp)).then((r) => { if (!ok(r)) return; BZ.net.invalidate('prod_tmp_char'); pl.start(tmp, 0, scriptLen(tmp) + 0.5); });
     }, 'go');
     const root = card('کارگاه عروسک و گیاه', 'شخصیت بسازید و صدایش را آزمایش کنید. هر تغییر روی سرور داخلی ذخیره می‌شود و در نمایش‌ها و «زندگی» استفاده می‌شود.',
-      list, h('div', { class: 'r-ctrl' }, BZ.btn('+ عروسک', () => create('puppet')), BZ.btn('+ گیاه', () => create('plant'))), cv,
-      h('div', { class: 'r-ctrl' }, emoSeg), h('div', { class: 'r-ctrl' }, sayI, say, BZ.btn('■', () => pl.stop(), 'sm')), phon, ed);
+      list, h('div', { class: 'r-ctrl' }, BZ.btn('+ عروسک', () => create('puppet')), BZ.btn('+ گیاه', () => create('plant')), BZ.btn('+ شیء (درخت، میز، خانه…)', () => create('prop'))), cv,
+      pl.bar, h('div', { class: 'r-ctrl' }, emoSeg), h('div', { class: 'r-ctrl' }, sayI, say, BZ.btn('■', () => pl.stop(), 'sm')), phon, ed);
     if (cur) cur = draftOf(cur);
     renderList(); renderEd();
     BZ.bus.on('lib', () => { if (!(cur && cur._draft)) { cur = (cur && BZ.lib.chars.find((x) => x.id === cur.id)) || BZ.lib.chars.find(notTmp); renderEd(); } renderList(); });
@@ -157,7 +204,8 @@
         if (pl.playing) { pl.paint(now); return; }
         const w = cv.width, hh = cv.height; const gr = g.createLinearGradient(0, 0, 0, hh); gr.addColorStop(0, '#26364a'); gr.addColorStop(1, '#14202c'); g.fillStyle = gr; g.fillRect(0, 0, w, hh);
         g.fillStyle = '#2a3a4a'; g.fillRect(0, hh * 0.88, w, hh * 0.12);
-        if (cur) BZ.char.draw(g, cur, { x: w / 2, y: hh * 0.9, s: (hh * 0.62) / (cur.type === 'plant' ? 150 : 125), dir: 1, emo, t: now / 1000, open: 0, look: Math.sin(now / 1500) * 0.5, grow: 1 });
+        if (cur && cur.type === 'prop') BZ.drawProp(g, { type: cur.ptype, color: cur.color, x: 0.5 }, w / 2, hh * 0.85, (hh * 0.5 / 40) * (cur.size || 1), now / 1000);
+        else if (cur) BZ.char.draw(g, cur, { x: w / 2, y: hh * 0.9, s: (hh * 0.62) / (cur.type === 'plant' ? 150 : 125), dir: 1, emo, t: now / 1000, open: 0, look: Math.sin(now / 1500) * 0.5, grow: 1 });
       },
     };
   }
@@ -181,47 +229,78 @@
     }
     function renderEd() {
       ed.innerHTML = ''; if (!cur) return;
-      const s = cur, ro = false, chOpts = BZ.lib.chars.filter(notTmp).map((c) => ({ v: c.id, t: (c.type === 'plant' ? '🌱 ' : '🧸 ') + c.name }));
+      const s = cur, ro = false, chOpts = BZ.lib.chars.filter((c) => notTmp(c) && c.type !== 'prop').map((c) => ({ v: c.id, t: (c.type === 'plant' ? '🌱 ' : '🧸 ') + c.name }));
       const inp = (key) => { const i = h('input', { type: 'text', class: 'inp', value: s[key] || '', disabled: ro }); i.addEventListener('input', () => { s[key] = i.value; save(); }); return i; };
       const castBox = h('div', { class: 'tlist' }), lineBox = h('div', { class: 'tlist' });
+      const effVoice = (m) => Object.assign({}, (BZ.lib.char(m.cid).voice) || {}, m.voice || {});
+      const voiceSel = (m, after) => BZ.select(VOPTS(), m.voice && m.voice.neural !== undefined ? m.voice.neural : '@', (v) => {
+        if (v === '@') { if (m.voice) { delete m.voice.neural; if (!Object.keys(m.voice).length) delete m.voice; } } else { m.voice = m.voice || {}; m.voice.neural = v; }
+        save(); after && after();
+      });
       function drawCast() {
         castBox.innerHTML = '';
         s.cast.forEach((m, i) => {
-          const sel = BZ.select(chOpts, m.cid, (v) => { m.cid = v; save(); drawLines(); }); sel.disabled = ro;
+          const sel = BZ.select(chOpts, m.cid, (v) => { m.cid = v; save(); drawCast(); drawLines(); }); sel.disabled = ro;
           const x = BZ.slider({ label: 'جایگاه', min: 0, max: 1, step: 0.05, value: m.x == null ? 0.5 : m.x, fmt: (v) => Math.round(v * 100) + '٪', onInput: (v) => { m.x = v; save(); } });
           const zz = BZ.slider({ label: 'عمق (۰ نزدیک ← ۱ دور)', min: 0, max: 1, step: 0.05, value: m.z == null ? 0.1 : m.z, fmt: (v) => v.toFixed(2), onInput: (v) => { m.z = v; save(); } });
-          castBox.append(h('div', { class: 'trow wrap' }, h('b', null, (i + 1) + '.'), sel, x, s.set === 'world' ? zz : null, ro ? null : BZ.btn('حذف', () => { s.cast.splice(i, 1); s.lines = s.lines.filter((l) => l.who !== i).map((l) => (l.who > i ? Object.assign(l, { who: l.who - 1 }) : l)); save(); drawCast(); drawLines(); }, 'sm')));
+          const ev = effVoice(m), st = h('span', { class: 'lbl' });
+          const vs = voiceSel(m, () => { drawLines(); });
+          const pit = BZ.slider({ label: 'زیروبمی (این نمایش)', min: 70, max: 400, step: 5, value: ev.pitch || 180, fmt: (v) => v + ' Hz', onInput: (v) => { m.voice = m.voice || {}; m.voice.pitch = v; save(); } });
+          const spd = BZ.slider({ label: 'سرعت گفتار (این نمایش)', min: 0.6, max: 1.6, step: 0.05, value: ev.speed || 1, fmt: (v) => v.toFixed(2) + '×', onInput: (v) => { m.voice = m.voice || {}; m.voice.speed = v; save(); } });
+          castBox.append(h('div', { class: 'cast-card' },
+            h('div', { class: 'trow wrap' }, h('b', null, (i + 1) + '.'), sel, x, s.set === 'world' ? zz : null, ro ? null : BZ.btn('حذف', () => { s.cast.splice(i, 1); s.lines = s.lines.filter((l) => l.who !== i).map((l) => (l.who > i ? Object.assign(l, { who: l.who - 1 }) : l)); save(); drawCast(); drawLines(); }, 'sm')),
+            h('div', { class: 'trow wrap' }, h('span', { class: 'lbl' }, '🎙 صدا در این نمایش:'), vs, BZ.btn('🔊 آزمون صدا', () => testVoice(effVoice(m), 'سلام، من این صدا را دارم.', (t) => { st.textContent = t; }), 'sm'), st),
+            h('details', { class: 'vfine' }, h('summary', null, 'تنظیم دقیق صدا'), h('div', null, pit, spd, BZ.btn('بازنشانی به صدای شخصیت', () => { delete m.voice; save(); drawCast(); drawLines(); }, 'sm')))));
         });
       }
       const propBox = h('div', { class: 'tlist' }), propWrap = h('div');
+      const PN = BZ.PROP_NAMES, PI = BZ.PROP_ICON || {}, PC = BZ.PROP_COLOR || {};
+      function addProp(o) {
+        s.props = s.props || [];
+        if (s.props.length >= 24) { BZ.toast('حداکثر ۲۴ شیء'); return; }
+        s.props.push(Object.assign({ x: 0.15 + Math.random() * 0.7, z: 0.3 + Math.random() * 0.6, size: 1 }, o)); save(); drawProps();
+      }
       function drawProps() {
         propWrap.innerHTML = ''; propBox.innerHTML = '';
-        if (s.set !== 'world') { propWrap.append(h('p', { class: 'note' }, 'برای ساختن اشیا و منظرهٔ سه‌بعدی، دکور را «جهان سه‌بعدی» بگذارید.')); return; }
+        const types = Object.keys(PN).map((k) => ({ v: k, t: (PI[k] || '') + ' ' + PN[k] }));
+        if (s.set !== 'world') {
+          propWrap.append(h('h4', null, 'اشیای صحنه'), h('p', { class: 'note' }, 'اشیا (درخت، میز، خانه، زمین، گلدان…) فقط در دکور «جهان سه‌بعدی» دیده می‌شوند.'), BZ.btn('🌍 تبدیل دکور به جهان سه‌بعدی', () => { s.set = 'world'; setSel.value = 'world'; save(); drawCast(); drawProps(); }, 'go'));
+          return;
+        }
         s.props = s.props || [];
-        const types = Object.keys(BZ.PROP_NAMES).map((k) => ({ v: k, t: BZ.PROP_NAMES[k] })), defC = { tree: '#4da35a', pine: '#2f7d4a', bush: '#3f9a52', flowerbed: '#ff5d8f', rock: '#8a8f98', house: '#e8c9a0', fence: '#c9a46a', lamp: '#ffd36a', table: '#9a6a3a', sofa: '#b04a5a', tv: '#4a90d8', pillar: '#d8d2c4', cloud: '#ffffff', mountain: '#8a96aa', pond: '#4a90d8', box: '#e8903a' };
+        const lib = BZ.lib.chars.filter((c) => c.type === 'prop' && notTmp(c));
         s.props.forEach((p, i) => {
-          const ts = BZ.select(types, p.type, (v) => { p.type = v; save(); }), cl = h('input', { type: 'color', class: 'inp clr', value: p.color || '#4da35a', style: { width: '44px' } });
+          const ts = BZ.select(types, p.type, (v) => { p.type = v; save(); drawProps(); }), cl = h('input', { type: 'color', class: 'inp clr', value: p.color || '#4da35a', style: { width: '44px' } });
           cl.addEventListener('input', () => { p.color = cl.value; save(); });
-          propBox.append(h('div', { class: 'trow wrap' }, ts, cl,
+          propBox.append(h('div', { class: 'trow wrap' }, h('span', { class: 'pico' }, PI[p.type] || '▫️'), ts, cl,
             BZ.slider({ label: 'چپ/راست', min: -0.2, max: 1.2, step: 0.02, value: p.x == null ? 0.5 : p.x, fmt: (v) => v.toFixed(2), onInput: (v) => { p.x = v; save(); } }),
             BZ.slider({ label: 'عمق', min: 0, max: 1, step: 0.02, value: p.z == null ? 0.5 : p.z, fmt: (v) => v.toFixed(2), onInput: (v) => { p.z = v; save(); } }),
             BZ.slider({ label: 'اندازه', min: 0.4, max: 3, step: 0.1, value: p.size || 1, fmt: (v) => v.toFixed(1) + '×', onInput: (v) => { p.size = v; save(); } }),
             BZ.btn('✕', () => { s.props.splice(i, 1); save(); drawProps(); }, 'sm')));
         });
-        const addT = BZ.select(types, 'tree', () => {});
-        propWrap.append(h('h4', null, 'اشیای صحنه (سه‌بعدی)'), propBox, h('div', { class: 'r-ctrl' }, addT, BZ.btn('+ ساخت شیء', () => { if (s.props.length >= 24) { BZ.toast('حداکثر ۲۴ شیء'); return; } const t = addT.value; s.props.push({ type: t, color: defC[t], x: 0.15 + Math.random() * 0.7, z: 0.3 + Math.random() * 0.6, size: 1 }); save(); drawProps(); }, 'go'),
-          BZ.btn('منظرهٔ نمونه', () => { s.props = [{ type: 'mountain', color: '#8a96aa', x: 0.25, z: 1, size: 1.6 }, { type: 'house', color: '#e8c9a0', x: 0.78, z: 0.8, size: 1 }, { type: 'pine', color: '#2f7d4a', x: 0.05, z: 0.6 }, { type: 'tree', color: '#4da35a', x: 0.92, z: 0.45 }, { type: 'pond', color: '#4a90d8', x: 0.4, z: 0.55 }, { type: 'flowerbed', color: '#ff5d8f', x: 0.62, z: 0.3 }, { type: 'lamp', color: '#ffd36a', x: 0.15, z: 0.25 }, { type: 'fence', color: '#c9a46a', x: 0.5, z: 0.75 }]; save(); drawProps(); })));
+        const pal = h('div', { class: 'chips' }, ...Object.keys(PN).map((k) => h('button', { type: 'button', class: 'chip', title: PN[k], onclick: () => addProp({ type: k, color: PC[k] || '#4da35a' }) }, (PI[k] || '') + ' ' + PN[k])));
+        const mine = lib.length ? h('div', { class: 'chips' }, h('span', { class: 'lbl' }, 'اشیای من (از کارگاه):'), ...lib.map((c) => h('button', { type: 'button', class: 'chip', onclick: () => addProp({ type: c.ptype || 'box', color: c.color, size: c.size || 1 }) }, (PI[c.ptype] || '🧩') + ' ' + c.name))) : h('p', { class: 'note' }, 'برای ساختن اشیای شخصی (رنگ و اندازهٔ دلخواه) به «کارگاه عروسک و گیاه ← + شیء» بروید.');
+        propWrap.append(h('h4', null, 'اشیای صحنه (سه‌بعدی)'), h('p', { class: 'note' }, 'روی هر شیء بزنید تا به صحنه اضافه شود؛ سپس جایگاه، عمق و اندازه‌اش را تنظیم کنید.'), pal, mine, propBox,
+          h('div', { class: 'r-ctrl' }, BZ.btn('منظرهٔ نمونه', () => { s.props = [{ type: 'ground', color: '#6cc27a', x: 0.5, z: 0.55, size: 1.6 }, { type: 'mountain', color: '#8a96aa', x: 0.25, z: 1, size: 1.6 }, { type: 'house', color: '#e8c9a0', x: 0.78, z: 0.8, size: 1 }, { type: 'pine', color: '#2f7d4a', x: 0.05, z: 0.6 }, { type: 'tree', color: '#4da35a', x: 0.92, z: 0.45 }, { type: 'pond', color: '#4a90d8', x: 0.4, z: 0.55 }, { type: 'flowerbed', color: '#ff5d8f', x: 0.62, z: 0.3 }, { type: 'lamp', color: '#ffd36a', x: 0.15, z: 0.25 }, { type: 'fence', color: '#c9a46a', x: 0.5, z: 0.75 }]; save(); drawProps(); }), BZ.btn('حذف همهٔ اشیا', () => { s.props = []; save(); drawProps(); }, 'sm')));
       }
       function drawLines() {
         lineBox.innerHTML = '';
         const who = s.cast.map((m, i) => ({ v: i, t: (i + 1) + '. ' + BZ.lib.char(m.cid).name }));
         s.lines.forEach((l, i) => {
-          const ws = BZ.select(who.map((o) => ({ v: String(o.v), t: o.t })), String(l.who), (v) => { l.who = +v; save(); }); ws.disabled = ro;
+          const m = s.cast[l.who];
+          const ws = BZ.select(who.map((o) => ({ v: String(o.v), t: o.t })), String(l.who), (v) => { l.who = +v; save(); drawLines(); }); ws.disabled = ro;
           const es = BZ.select(EMO_OPTS, l.emo || 'neutral', (v) => { l.emo = v; save(); }); es.disabled = ro;
           const as = BZ.select(ACT_OPTS, l.act || '', (v) => { l.act = v; save(); }); as.disabled = ro;
-          const ti = h('input', { type: 'text', class: 'inp', value: l.text || '', disabled: ro, style: { flex: '1', minWidth: '160px' } }); ti.addEventListener('input', () => { l.text = ti.value; save(); });
+          const speaker = () => (m ? effVoice(m) : {});
+          const edit = () => openNotepad({ title: 'متن دیالوگ ' + (i + 1) + (m ? ' — ' + BZ.lib.char(m.cid).name : ''), text: l.text || '', sp: speaker().speed || 1, onSave: (t) => { l.text = t; save(); drawLines(); } });
+          const ti = h('input', { type: 'text', class: 'inp', value: l.text || '', disabled: ro, style: { flex: '1', minWidth: '160px' } });
+          ti.addEventListener('focus', () => { if ((l.text || '').length > 40) { ti.blur(); edit(); } });
+          ti.addEventListener('input', () => { l.text = ti.value; save(); });
+          const vs = m ? voiceSel(m, () => { drawCast(); drawLines(); }) : null;
           const mv = (d) => { const j = i + d; if (j < 0 || j >= s.lines.length) return; [s.lines[i], s.lines[j]] = [s.lines[j], s.lines[i]]; save(); drawLines(); };
-          lineBox.append(h('div', { class: 'trow wrap' }, ws, es, as, ti, ro ? null : h('span', null, BZ.btn('▲', () => mv(-1), 'sm'), BZ.btn('▼', () => mv(1), 'sm'), BZ.btn('✕', () => { s.lines.splice(i, 1); save(); drawLines(); }, 'sm'))));
+          lineBox.append(h('div', { class: 'line-card' },
+            h('div', { class: 'trow wrap' }, ws, es, as, vs ? h('span', { class: 'vwrap' }, h('span', { class: 'lbl' }, '🎙'), vs) : null, ro ? null : h('span', null, BZ.btn('▲', () => mv(-1), 'sm'), BZ.btn('▼', () => mv(1), 'sm'), BZ.btn('✕', () => { s.lines.splice(i, 1); save(); drawLines(); }, 'sm'))),
+            h('div', { class: 'trow' }, ti, BZ.btn('📝 نت‌پد', edit, 'sm'))));
         });
       }
       const setSel = BZ.select(Object.keys(BZ.SET_NAMES).map((k) => ({ v: k, t: BZ.SET_NAMES[k] })), s.set || 'living', (v) => { s.set = v; save(); drawCast(); drawProps(); }); setSel.disabled = ro;
@@ -242,7 +321,7 @@
     const exV = BZ.btn('⬇ خروجی ویدئو (WebM)', () => { if (!cur) return; exV.disabled = true; const sec = scriptLen(cur); exportShow(cur, true, sec, (p) => { prog.textContent = 'ضبط… ' + Math.round(p * 100) + '٪'; }, () => { exV.disabled = false; prog.textContent = ''; }); });
     const exA = BZ.btn('⬇ خروجی صدا (رادیو)', () => { if (!cur) return; exA.disabled = true; exportShow(cur, false, scriptLen(cur), (p) => { prog.textContent = 'ضبط… ' + Math.round(p * 100) + '٪'; }, () => { exA.disabled = false; prog.textContent = ''; }); });
     const root = card('کارگردانی نمایش', 'بازیگران (عروسک/گیاه) و دیالوگ‌ها را بنویسید. گفتار با مدل منبع–فیلتر ساخته می‌شود و دهان با همان زمان‌بندی هجاها حرکت می‌کند. سرور داخلی صحنه و صدا را جریان می‌دهد.',
-      picker, h('div', { class: 'r-ctrl' }, BZ.btn('+ نمایش جدید', () => create())), cv, h('div', { class: 'r-ctrl' }, play, BZ.btn('■', () => pl.stop(), 'sm'), exV, exA), prog, ed, pub.el);
+      picker, h('div', { class: 'r-ctrl' }, BZ.btn('+ نمایش جدید', () => create())), cv, pl.bar, h('div', { class: 'r-ctrl' }, play, BZ.btn('■', () => pl.stop(), 'sm'), exV, exA), prog, ed, pub.el);
     if (cur) cur = draftOf(cur);
     renderPicker(); renderEd(); pub.refresh();
     BZ.bus.on('lib', () => { if (!(cur && cur._draft)) cur = (cur && BZ.lib.shows.find((x) => x.id === cur.id)) || BZ.lib.shows.find((q) => q.kind === 'script' && notTmp(q)); renderPicker(); pub.refresh(); });
@@ -292,7 +371,7 @@
       d.plants.forEach((p) => { insp.append(h('div', { class: 'erow' }, h('b', null, '🌱 ' + BZ.lib.char(p.cid).name + (p.wilt > 0.3 ? ' — پژمرده' : '')))); insp.append(bar('آب', p.water, '#4a90d8'), bar('رشد', p.grow, '#37c27a')); });
     }
     const root = card('زندگی: شبیه‌ساز خانه و باغ', 'ساکنان نیازهایی دارند (انرژی، سیری، سرگرمی، معاشرت) که با گذر زمان کم می‌شود؛ هر کدام با «تابع مطلوبیت» تصمیم می‌گیرند چه کنند. گیاهان با نور روز و آب رشد می‌کنند و بدون آب پژمرده می‌شوند. همه‌چیز در سرور داخلی و قطعی (قابل‌تکرار) اجرا می‌شود؛ هر ثانیهٔ واقعی = ۲ دقیقهٔ زندگی.',
-      picker, h('div', { class: 'r-ctrl' }, BZ.btn('+ زندگی جدید', () => create())), cv, h('div', { class: 'r-ctrl' }, play, BZ.btn('■', () => pl.stop(), 'sm'), exV), prog, h('h4', null, 'وضعیت درونی (از سرور)'), insp, ed, pub.el);
+      picker, h('div', { class: 'r-ctrl' }, BZ.btn('+ زندگی جدید', () => create())), cv, pl.bar, h('div', { class: 'r-ctrl' }, play, BZ.btn('■', () => pl.stop(), 'sm'), exV), prog, h('h4', null, 'وضعیت درونی (از سرور)'), insp, ed, pub.el);
     if (cur) cur = draftOf(cur);
     renderPicker(); renderEd(); pub.refresh();
     BZ.bus.on('lib', () => { if (!(cur && cur._draft)) cur = (cur && BZ.lib.shows.find((x) => x.id === cur.id)) || BZ.lib.shows.find((q) => q.kind === 'life' && notTmp(q)); renderPicker(); pub.refresh(); });
@@ -352,7 +431,7 @@
     ['موتور: زندگی قطعی و دسترسی تصادفی = ترتیبی', () => { const s = BZ.lib.show('show_life'); if (!s) return [false, 'نمایش زندگی نیست']; const E1 = new BZ.Engine(BZ.lib), E2 = new BZ.Engine(BZ.lib); const t = s.epoch + 900; const a = JSON.stringify(E1.scene(s, t)), b = JSON.stringify(E2.scene(s, t)); return [a === b, 'برابر']; }],
     ['موتور: نیازها در بازهٔ [۰،۱] و گیاه رشد می‌کند', () => { const s = BZ.lib.show('show_life'), E = new BZ.Engine(BZ.lib), i0 = E.inspect(s, s.epoch + 1), i1 = E.inspect(s, s.epoch + 400); const okN = i1.agents.every((a) => Object.values(a.n).every((v) => v >= 0 && v <= 1)); return [okN && i1.plants.every((p, i) => p.grow >= i0.plants[i].grow), 'ساعت ' + i1.hour.toFixed(1)]; }],
     ['موتور: میزان‌های صوتی نمایش قطعی‌اند', () => { const s = BZ.lib.show('show_talk'), E = new BZ.Engine(BZ.lib); return [JSON.stringify(E.bar(s, 3)) === JSON.stringify(new BZ.Engine(BZ.lib).bar(s, 3)), 'برابر']; }],
-    ['تصویر: همهٔ شخصیت‌ها × احساسات رسم می‌شوند', () => { const c = BZ.cv(160, 120), g = c.getContext('2d'); let n = 0; BZ.lib.chars.forEach((ch) => Object.keys(BZ.EMOTIONS).forEach((e) => { BZ.char.draw(g, ch, { x: 80, y: 100, s: 0.6, dir: 1, emo: e, t: 1, open: 0.5, grow: 1 }); n++; })); return [n > 20, n + ' رسم']; }],
+    ['تصویر: همهٔ شخصیت‌ها × احساسات رسم می‌شوند', () => { const c = BZ.cv(160, 120), g = c.getContext('2d'); let n = 0; BZ.lib.chars.filter((q) => q.type !== 'prop').forEach((ch) => Object.keys(BZ.EMOTIONS).forEach((e) => { BZ.char.draw(g, ch, { x: 80, y: 100, s: 0.6, dir: 1, emo: e, t: 1, open: 0.5, grow: 1 }); n++; })); return [n > 20, n + ' رسم']; }],
     ['شبکه: سرور داخلی بالاست و تعارض پخش رد می‌شود', () => [BZ.net.up && BZ.net.mode !== '', 'حالت ' + BZ.net.mode]],
   ];
   BZ.exportShow = exportShow;

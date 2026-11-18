@@ -49,10 +49,12 @@
   ['error', 'warn'].forEach((k) => { const o = console[k]; console[k] = function () { try { if (k === 'error') stat.err++; D.add('console', k === 'error' ? 'e' : 'w', Array.prototype.map.call(arguments, (a) => (a && a.message) || (typeof a === 'object' ? (() => { try { return JSON.stringify(a); } catch (x) { return String(a); } })() : String(a))).join(' ')); } catch (e) { /* */ } return o.apply(console, arguments); }; });
 
   // ----- توقف رشتهٔ اصلی (هنگ): ضربان ۱۰۰ms؛ انحراف زیاد = رشته مشغول بوده -----
-  let lastBeat = performance.now();
+  let lastBeat = performance.now(), wasHid = false;
+  document.addEventListener('visibilitychange', () => { wasHid = true; lastBeat = performance.now(); });
   setInterval(() => {
     const now = performance.now(), drift = now - lastBeat - 100; lastBeat = now;
     if (document.hidden) return;   // پس‌زمینه عمداً کند می‌شود
+    if (wasHid) { wasHid = false; return; }   // اولین ضربان پس از بازگشت از پس‌زمینه: توقف واقعی نیست
     if (drift > 200) { stat.stall++; stat.stallMs += drift; stat.stallMax = Math.max(stat.stallMax, drift); D.add('stall', drift > 800 ? 'e' : 'w', 'رشتهٔ اصلی ' + Math.round(drift) + 'ms مشغول بود', drift, D.ctx()); }
   }, 100);
   try { new PerformanceObserver((li) => li.getEntries().forEach((e) => { stat.longtask++; stat.ltMax = Math.max(stat.ltMax, e.duration); if (e.duration > 120) D.add('longtask', e.duration > 400 ? 'w' : 'i', 'long task ' + Math.round(e.duration) + 'ms', e.duration); })).observe({ entryTypes: ['longtask'] }); } catch (e) { /* پشتیبانی نشده */ }

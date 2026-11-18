@@ -1,5 +1,5 @@
 /* سرویس‌ورکر: کش کردن فایل‌های خود برنامه برای کار آفلاین (هیچ درخواست بیرونی انجام نمی‌شود) */
-const V = 'bazi-lab-v1-s10';
+const V = 'bazi-lab-v1-s11';
 const FILES = ['./', 'index.html', 'manifest.json', 'icon.svg', 'icon-192.png', 'icon-512.png', 'css/style.css',
   'js/diag.js', 'js/util.js', 'js/ui.js', 'js/world.js', 'js/audio.js', 'js/speech.js', 'js/engine.js', 'js/server.js', 'js/netd.js', 'js/net.js', 'js/puppet.js', 'js/video.js', 'js/scene.js', 'js/director.js', 'js/pyramid.js', 'js/worlds.js', 'js/radio.js', 'js/tv.js', 'js/vcr.js', 'js/hifi.js', 'js/lab.js', 'js/studio.js', 'js/neural-tts.js', 'js/ntts-worker.js', 'js/app.js'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(V).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())); });
