@@ -24,6 +24,7 @@
   const failed = new Set();         // کلیدهایی که ساخته نشدند (دوباره تلاش نمی‌شود)
   const SR_DEFAULT = 22050, MAX_SESS = 2;
   const DG = (c, m, ms, w) => { try { if (BZ.diag) (w ? BZ.diag.warn : BZ.diag.mark)(c, m, ms); } catch (e) { /* */ } };
+  const CAL = {};                   // شناسهٔ صدا ← ضریب یادگرفته‌شدهٔ طول (تا بیشتر جمله‌ها با یک بار اجرا به مدت هدف برسند)
   let chain = Promise.resolve();    // ساخت صدا پشت‌سرهم (نشست ort هم‌زمان امن نیست)
   const serial = (fn) => { const p = chain.then(fn, fn); chain = p.catch(() => {}); return p; };
 
@@ -131,7 +132,7 @@
   }
 
   async function synthOne(v, text, lengthScale) {
-    if (v.remote) { const r = await wcall({ op: 'run', vid: v.id, text, ls: lengthScale }, 90000); return r.pcm; }
+    if (v.remote) { const r = await wcall({ op: 'run', vid: v.id, text, ls: lengthScale }, 90000); if (r.tp != null) { v.tp = (v.tp || 0) + r.tp; v.ti = (v.ti || 0) + r.ti; DG('ntts', 'جمله: آوانگاری ' + r.tp + 'ms + مدل ' + r.ti + 'ms (' + text.length + ' نویسه)', r.tp + r.ti); } return r.pcm; }
     await new Promise((r) => setTimeout(r, 0));   // به رابط فرصت نفس‌کشیدن بده
     const ids = await phonemeIds(text, v.cfg), T = window.ort.Tensor, inf = v.cfg.inference || {};
     const feeds = {
@@ -167,10 +168,14 @@
         const all = new Float32Array(n); let o = 0; parts.forEach((p) => { all.set(p, o); o += p.length; });
         return resample(all, k);
       };
-      let ls = ((v.cfg.inference || {}).length_scale || 1) / sp * k, pcm = await run(ls);
+      const lsBase = ((v.cfg.inference || {}).length_scale || 1) / sp * k;
+      let ls = target > 0.15 ? BZ.clamp(lsBase * (CAL[vid] || 1), 0.35, 2.5) : lsBase, pcm = await run(ls);
       if (target > 0.15) {   // مدت را به هدف نزدیک کن (طول مدل تقریباً خطی است)
-        const d0 = pcm.length / sr;
-        if (Math.abs(d0 / target - 1) > 0.06) { ls = BZ.clamp(ls * target / d0, 0.35, 2.5); pcm = await run(ls); }
+        let d0 = pcm.length / sr;
+        const q = (ls * target / d0) / lsBase;   // ضریب ایده‌آل این جمله؛ میانگین متحرکش برای جملهٔ بعد
+        CAL[vid] = BZ.clamp(CAL[vid] ? CAL[vid] * 0.6 + q * 0.4 : q, 0.4, 2.2);
+        // فقط اگر خیلی بلندتر (برش می‌خورد) یا خیلی کوتاه‌تر شد، یک بار دوباره؛ وگرنه همان نتیجه (سریع‌تر)
+        if (d0 > target * 1.06 || d0 < target * 0.8) { ls = BZ.clamp(ls * target / d0, 0.35, 2.5); pcm = await run(ls); DG('ntts', 'اجرای دوم برای هم‌اندازه‌شدن (' + d0.toFixed(1) + 's → هدف ' + target.toFixed(1) + 's)'); }
       }
       const res = { pcm, sr, dur: pcm.length / sr };
       DG('ntts', 'synth ' + vid + ' ' + text.length + ' نویسه ← ' + res.dur.toFixed(1) + 's' + (target ? ' (هدف ' + target.toFixed(1) + 's)' : ''), performance.now() - tS, performance.now() - tS > 6000);
@@ -197,6 +202,7 @@
   let wantBusy = false;
   function want(say) {   // پیش‌ساخت پس‌زمینه: جملهٔ بعدی که هنوز آماده نیست
     const vid = vidFor(say); if (!vid || !say.t) return;
+    neuralSeenAt = performance.now();
     const sp = BZ.clamp(say.sp || 1, 0.5, 2), key = keyOf(vid, say.t, sp, pitchK(say.f0), true);
     if (cache.has(key) || failed.has(key) || wantQ.some((q) => q.key === key)) return;
     wantQ.push({ key, say, vid }); drain();
@@ -226,9 +232,10 @@
     });
     return out;
   }
+  let neuralSeenAt = 0;   // آخرین باری که صدای عصبی لازم شد (برای افزایش پیش‌دید جریان)
   const diagState = () => { const ids = [...V.entries()].filter(([k, x]) => x.sess).map(([k]) => k); const ld = [...V.entries()].filter(([k, x]) => x.loading).map(([k]) => k); return (ld.length ? 'load:' + ld.join(',') + ' ' : '') + 'q=' + wantQ.length + (wantBusy ? ' busy' : '') + ' ' + (WK.ok === true ? 'worker' : WK.ok === false ? 'main' : 'w?') + ' v=' + (ids.join(',') || '-'); };
   const api = {
-    diagState,
+    diagState, get wantsAhead() { return performance.now() - neuralSeenAt < 20000; },
     voices: VOICES, get voice() { return voice; },
     setVoice(id) { if (id === voice || !VOICES.some((x) => x[0] === id)) return; voice = id; BZ.store.set('ntts_voice', id); },
     init, synth, play, splitSentences, resample, pitchK, want, showLines,

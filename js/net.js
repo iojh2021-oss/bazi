@@ -85,7 +85,7 @@
     pump() {
       if (this.closed || this.busy) return;
       const tc = this.now(), DT = 0.05, last = this.sc.length ? this.sc[this.sc.length - 1].t : tc - DT, wantEnd = tc + 1.4;
-      const needSc = last < wantEnd - DT, i0 = Math.floor(tc / 2), i1 = Math.floor((tc + 6) / 2), miss = [];
+      const needSc = last < wantEnd - DT, i0 = Math.floor(tc / 2), i1 = Math.floor((tc + (BZ.ntts && BZ.ntts.wantsAhead ? 16 : 6)) / 2), miss = [];
       for (let i = i0; i <= i1 && miss.length < 4; i++) if (!this.bars.has(i)) miss.push(i);
       if (!needSc && !miss.length) return;
       const from = Math.max(last + DT, tc), n = needSc ? Math.min(40, Math.ceil((wantEnd - from) / DT) + 1) : 0;
