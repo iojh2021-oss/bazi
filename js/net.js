@@ -66,7 +66,7 @@
   const prewarmQ = []; let prewarmT = 0;
   function prewarm() {
     prewarmT = 0; const say = prewarmQ.shift();
-    try { if (say && BZ.audio.ctx) BZ.speech.buffer(BZ.audio.ctx, say); } catch (e) { /* مهم نیست */ }
+    try { if (say && BZ.audio.ctx) BZ.diag ? BZ.diag.time('audio', 'prewarm buffer', () => BZ.speech.buffer(BZ.audio.ctx, say), 25) : BZ.speech.buffer(BZ.audio.ctx, say); } catch (e) { /* مهم نیست */ }
     if (prewarmQ.length) prewarmT = setTimeout(prewarm, 40);
   }
   // جریان زندهٔ یک برنامه از سرور: صحنه‌ها با ۲۰ هرتز، میزان‌های صوتی ۶ ثانیه جلوتر

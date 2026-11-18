@@ -22,7 +22,8 @@
   const S = { loading: null, err: '' };   // وضعیت مشترک (ort + آوانگار)
   const cache = new Map();          // کلید ← {pcm, sr, dur}
   const failed = new Set();         // کلیدهایی که ساخته نشدند (دوباره تلاش نمی‌شود)
-  const SR_DEFAULT = 22050, MAX_SESS = 3;
+  const SR_DEFAULT = 22050, MAX_SESS = 2;
+  const DG = (c, m, ms, w) => { try { if (BZ.diag) (w ? BZ.diag.warn : BZ.diag.mark)(c, m, ms); } catch (e) { /* */ } };
   let chain = Promise.resolve();    // ساخت صدا پشت‌سرهم (نشست ort هم‌زمان امن نیست)
   const serial = (fn) => { const p = chain.then(fn, fn); chain = p.catch(() => {}); return p; };
 
@@ -56,6 +57,7 @@
       if (!WK.w) { try { WK.w = new Worker(U('js/ntts-worker.js')); } catch (e) { return rej(e); }
         WK.w.onmessage = (ev) => { const d = ev.data, p = WK.pend.get(d.rid); if (!p) return; WK.pend.delete(d.rid); clearTimeout(p.t); d.ok ? p.res(d) : p.rej(new Error(d.error)); };
         WK.w.onerror = (ev) => { WK.pend.forEach((p) => { clearTimeout(p.t); p.rej(new Error('worker: ' + (ev.message || 'خطا'))); }); WK.pend.clear(); }; }
+      const t0 = performance.now(), res0 = res, rej0 = rej; res = (d) => { const ms = performance.now() - t0; if (ms > 250) DG('ntts', 'worker ' + msg.op + ' ' + (msg.text ? msg.text.length + ' نویسه' : (msg.vid || '')), ms); res0(d); }; rej = (e) => { DG('ntts', 'worker ' + msg.op + ' خطا: ' + (e && e.message), performance.now() - t0, true); rej0(e); };
       const rid = ++WK.n, t = setTimeout(() => { WK.pend.delete(rid); rej(new Error('worker پاسخ نداد')); }, ms || 120000);
       WK.pend.set(rid, { res, rej, t }); WK.w.postMessage(Object.assign({ rid }, msg));
     });
@@ -77,10 +79,11 @@
     if (v && v.loading) return v.loading;
     v = v || {}; v.id = id; V.set(id, v);
     const say = (m) => { if (onStatus) onStatus(m); };
+    const tL = performance.now();
     v.loading = (async () => {
       let done = false;
       if (WK.ok !== false && typeof Worker !== 'undefined') {
-        try { await loadViaWorker(id, v, say); done = true; } catch (e) { console.warn('ntts worker → رشتهٔ اصلی:', e && e.message); if (/پیدا نشد/.test(String(e && e.message))) throw e; killWorker(); }
+        try { await loadViaWorker(id, v, say); done = true; } catch (e) { console.warn('ntts worker → رشتهٔ اصلی:', e && e.message); DG('ntts', 'fallback → رشتهٔ اصلی؛ علت: ' + (e && e.message), null, true); if (/پیدا نشد/.test(String(e && e.message))) throw e; killWorker(); }
       }
       if (!done) {
         await initShared(say);
@@ -88,7 +91,7 @@
         say('مدل صدا (حدود ۶۱ مگابایت)…');
         v.sess = await window.ort.InferenceSession.create(await getBuf(vModel(id)), { executionProviders: ['wasm'] });
       }
-      v.loading = null; S.err = ''; say('آماده');
+      v.loading = null; S.err = ''; say('آماده'); DG('ntts', 'load ' + id + ' (' + (v.remote ? 'worker' : 'main') + ')', performance.now() - tL); if (v.remote) DG('ntts', 'worker ok');
       // حافظه: بیش از ۳ صدای هم‌زمان نگه نمی‌داریم
       const live = [...V.entries()].filter(([k, x]) => x.sess && k !== id);
       while (live.length >= MAX_SESS) { const [k, x] = live.shift(); try { x.sess.release(); } catch (e) { /* مهم نیست */ } x.sess = null; }
@@ -151,6 +154,7 @@
     opt = opt || {};
     const vid = opt.nv || voice, sp = BZ.clamp(opt.speed || 1, 0.5, 2), k = pitchK(opt.f0), key = keyOf(vid, text, sp, k, opt.fit);
     if (cache.has(key)) return cache.get(key);
+    const tS = performance.now();
     const target = opt.fit ? origPlan.call(SP, text, opt.speed || 1).dur : 0;
     const r = await serial(async () => {
       if (cache.has(key)) return cache.get(key);
@@ -169,6 +173,7 @@
         if (Math.abs(d0 / target - 1) > 0.06) { ls = BZ.clamp(ls * target / d0, 0.35, 2.5); pcm = await run(ls); }
       }
       const res = { pcm, sr, dur: pcm.length / sr };
+      DG('ntts', 'synth ' + vid + ' ' + text.length + ' نویسه ← ' + res.dur.toFixed(1) + 's' + (target ? ' (هدف ' + target.toFixed(1) + 's)' : ''), performance.now() - tS, performance.now() - tS > 6000);
       if (cache.size > 120) cache.clear();
       cache.set(key, res);
       return res;
@@ -221,7 +226,9 @@
     });
     return out;
   }
+  const diagState = () => { const ids = [...V.entries()].filter(([k, x]) => x.sess).map(([k]) => k); const ld = [...V.entries()].filter(([k, x]) => x.loading).map(([k]) => k); return (ld.length ? 'load:' + ld.join(',') + ' ' : '') + 'q=' + wantQ.length + (wantBusy ? ' busy' : '') + ' ' + (WK.ok === true ? 'worker' : WK.ok === false ? 'main' : 'w?') + ' v=' + (ids.join(',') || '-'); };
   const api = {
+    diagState,
     voices: VOICES, get voice() { return voice; },
     setVoice(id) { if (id === voice || !VOICES.some((x) => x[0] === id)) return; voice = id; BZ.store.set('ntts_voice', id); },
     init, synth, play, splitSentences, resample, pitchK, want, showLines,

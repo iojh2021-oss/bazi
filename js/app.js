@@ -66,6 +66,7 @@
   views.pyramid = { build: () => cabinet('wood', 'هرم ۵۳', 'آینه • نور • شتاب ثابت • ربات سخنگو', BZ.pyramidPanel()) };
   views.worlds = { build: () => cabinet('tvcab', 'جهان‌های تو در تو', 'آینه = تلویزیون • پیکسل • گرانش • رادیو', BZ.worldsPanel()) };
   views.lab = { build: () => BZ.labPanel() };
+  views.diag = { build: () => cabinet('wood', 'عیب‌یابی', 'هنگ‌ها • خطاها • زمان‌بندی • گزارش', BZ.diagPanel()) };
   views.voice = { build: () => cabinet('wood', 'صدای عصبی', 'گفتار آفلاین با کیفیت بالا • Piper', BZ.nttsPanel()) };
   views.studio = { build: () => { const p = BZ.directorPanel(), c = cabinet('wood', 'استودیو', 'عروسک و گیاه • کارگردانی • زندگی • سرور داخلی', p); return c; } };
 
@@ -79,7 +80,7 @@
   }
   BZ.show = show;
 
-  [['home', '🏠', 'اتاق'], ['radio', '📻', 'رادیو'], ['tv', '📺', 'تلویزیون'], ['vcr', '📼', 'ویدئو'], ['hifi', '🎛', 'هایفای'], ['studio', '🎬', 'استودیو'], ['pyramid', '🪞', 'هرم'], ['worlds', '🌀', 'جهان‌ها'], ['lab', '🧪', 'آزمایشگاه'], ['voice', '🗣', 'صدا']].forEach(([id, ic, name]) => {
+  [['home', '🏠', 'اتاق'], ['radio', '📻', 'رادیو'], ['tv', '📺', 'تلویزیون'], ['vcr', '📼', 'ویدئو'], ['hifi', '🎛', 'هایفای'], ['studio', '🎬', 'استودیو'], ['pyramid', '🪞', 'هرم'], ['worlds', '🌀', 'جهان‌ها'], ['lab', '🧪', 'آزمایشگاه'], ['voice', '🗣', 'صدا'], ['diag', '🩺', 'عیب‌یابی']].forEach(([id, ic, name]) => {
     const b = h('button', { type: 'button', class: 'navb', onclick: () => show(id) }, h('span', null, ic), name); b._id = id; nav.append(b);
   });
 
@@ -122,6 +123,7 @@
     lastPaint = now;
     const t0 = performance.now();
     try { v.el.paint(now); } catch (e) { console.error(e); }
+    const pc = performance.now() - t0; if (pc > 40 && BZ.diag) BZ.diag.warn('perf', 'رسم ' + cur + ' کند بود', pc);
     costAvg = costAvg * 0.85 + (performance.now() - t0) * 0.15;
   })(performance.now());
 

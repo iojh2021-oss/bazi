@@ -146,7 +146,7 @@
         return;
       }
       if (e.say) {
-        const buf = BZ.speech.buffer(ctx, e.say), src = ctx.createBufferSource(), g = ctx.createGain();
+        const buf = BZ.diag ? BZ.diag.time('audio', 'sync-buffer هنگام پخش', () => BZ.speech.buffer(ctx, e.say), 20) : BZ.speech.buffer(ctx, e.say), src = ctx.createBufferSource(), g = ctx.createGain();
         src.buffer = buf; src.playbackRate.value = r; g.gain.value = e.g || 0.8;
         src.connect(g); g.connect(dest);
         const off = Math.min(e.off || 0, Math.max(0, buf.duration - 0.01));
