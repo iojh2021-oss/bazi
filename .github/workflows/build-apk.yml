@@ -2,6 +2,8 @@ name: Build Android APK
 # اجرای دستی: Actions ← Build Android APK ← Run workflow. خروجی در Artifacts (فایل app-debug.apk).
 on:
   workflow_dispatch:
+permissions:
+  contents: read
 jobs:
   apk:
     runs-on: ubuntu-latest
